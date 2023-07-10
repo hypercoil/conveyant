@@ -21,6 +21,74 @@ from conveyant import (
 )
 
 
+def oper(name, w, x, y, z):
+    # print(f'{name}: {w}, {x}, {y}, {z}')
+    # print({name: (2 * w - x * z) / y})
+    return {name: (2 * w - x * z) / y}
+
+
+def increment_args(incr):
+    def transform(f, xfm=direct_transform):
+        def transformer_f(**numeric_params):
+            return {k: v + incr for k, v in numeric_params.items()}
+
+        def f_transformed(**params):
+            numeric_params = {
+                k: v for k, v in params.items()
+                if isinstance(v, (int, float))
+            }
+            other_params = {
+                k: v for k, v in params.items()
+                if k not in numeric_params
+            }
+            return xfm(f, transformer_f)(**other_params)(**numeric_params)
+
+        return f_transformed
+    return transform
+
+
+def negate_args():
+    def transform(f, xfm=direct_transform):
+        def transformer_f(**numeric_params):
+            return {k: -v for k, v in numeric_params.items()}
+
+        def f_transformed(**params):
+            numeric_params = {
+                k: v for k, v in params.items()
+                if isinstance(v, (int, float))
+            }
+            other_params = {
+                k: v for k, v in params.items()
+                if k not in numeric_params
+            }
+            return xfm(f, transformer_f)(**other_params)(**numeric_params)
+
+        return f_transformed
+    return transform
+
+
+def name_output(name):
+    def transform(f, xfm=direct_transform):
+        def transformer_f():
+            return {'name': name}
+
+        def f_transformed(**params):
+            return xfm(f, transformer_f)(**params)()
+        return f_transformed
+    return transform
+
+
+def rename_output(old_name, new_name):
+    def transform(f, xfm=direct_transform):
+        def transformer_f(**params):
+            return {new_name: params.pop(old_name), **params}
+
+        def f_transformed(**params):
+            return xfm(transformer_f, f)()(**params)
+        return f_transformed
+    return transform
+
+
 def test_replicate():
     params = {
         'a': [1, 2, 3],
@@ -131,3 +199,14 @@ def test_replicate():
     params_out = transformer(**params)
     for v in params_out.values():
         assert len(v) == 3
+
+
+def test_direct_transform():
+    w, x, y, z = 1, 2, 3, 4
+    name = 'test'
+    out = oper(name=name, w=w, x=x, y=y, z=z)
+    assert out[name] == -2
+
+    transformed_oper = increment_args(incr=1)(oper, xfm=direct_transform)
+    out = transformed_oper(name=name, w=w, x=x, y=y, z=z)
+    assert out[name] == -11 / 4
