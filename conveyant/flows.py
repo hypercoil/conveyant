@@ -63,103 +63,14 @@ def _dict_to_seq(
 def direct_compositor(
     f_outer: callable,
     f_inner: callable,
-    unpack_dict: bool = True,
 ) -> callable:
     def transformed_f_outer(**f_outer_params):
         def transformed_f_inner(**f_inner_params):
-            if unpack_dict:
-                return f_outer(
-                    **{**f_outer_params, **f_inner(**f_inner_params)}
-                )
-            return f_outer(f_inner(**f_inner_params), **f_outer_params)
+            return f_outer(
+                **{**f_outer_params, **f_inner(**f_inner_params)}
+            )
         return transformed_f_inner
     return transformed_f_outer
-
-
-def null_transform(
-    f: callable,
-    compositor: callable = direct_compositor,
-) -> callable:
-    return f
-
-
-def split_chain(
-    *chains: Sequence[callable],
-    map_spec: Optional[Sequence[str]] = None,
-    weave_type: Literal['maximal', 'minimal', 'strict'] = 'maximal',
-    maximum_aggregation_depth: Optional[int] = None,
-    broadcast_out_of_spec: bool = False,
-    merge_type: Optional[Literal["union", "intersection"]] = "union",
-) -> callable:
-    map_spec = map_spec or []
-    map_spec_transformer = replicate(
-        spec=map_spec,
-        weave_type=weave_type,
-        n_replicates=len(chains),
-        maximum_aggregation_depth=maximum_aggregation_depth,
-        broadcast_out_of_spec=broadcast_out_of_spec,
-    )
-    def transform(
-        f: callable,
-        compositor: callable = direct_compositor
-    ) -> callable:
-        fs_transformed = tuple(c(f, compositor=compositor) for c in chains)
-        try:
-            fs_transformed = tuple(chain(*fs_transformed))
-        except TypeError:
-            pass
-
-        def f_transformed(**params: Mapping):
-            mapping = map_spec_transformer(**params)
-            ret = tuple(
-                fs_transformed[i](**{
-                    **params, **{**params, **{
-                        k: mapping[k][i]
-                        if len(mapping[k]) > 1 else mapping[k][0]
-                        for k in mapping
-                    }}
-                })
-                for i in range(len(fs_transformed))
-            )
-            return _seq_to_dict(ret, merge_type=merge_type)
-
-        return f_transformed
-    return transform
-
-
-def ichain(*pparams) -> callable:
-    def transform(
-        f: callable,
-        compositor: callable = direct_compositor,
-    ) -> callable:
-        for p in reversed(pparams):
-            f = p(f, compositor=compositor)
-        return f
-    return transform
-
-
-def ochain(*pparams) -> callable:
-    def transform(
-        f: callable,
-        compositor: callable = direct_compositor,
-    ) -> callable:
-        for p in pparams:
-            f = p(f, compositor=compositor)
-        return f
-    return transform
-
-
-def iochain(
-    f: callable,
-    ichain: Optional[callable] = None,
-    ochain: Optional[callable] = None,
-    compositor: callable = direct_compositor,
-) -> callable:
-    if ichain is not None:
-        f = ichain(f, compositor=compositor)
-    if ochain is not None:
-        f = ochain(f, compositor=compositor)
-    return f
 
 
 def joindata(
@@ -174,20 +85,6 @@ def joindata(
         return out
 
     return join(joining_f, join_vars)
-
-
-# def map_over_sequence(
-#     xfm: callable,
-#     mapping: Optional[Mapping[str, Sequence]] = None,
-#     n_replicates: Optional[int] = None,
-# ) -> callable:
-#     mapping_transform = close_mapping_transform(
-#         mapping=mapping,
-#         n_replicates=n_replicates,
-#     )
-#     def transform(f: callable) -> callable:
-#         return xfm(f, mapping_transform)
-#     return transform
 
 
 # def replicate_and_map(
@@ -296,50 +193,62 @@ def close_replicating_transform(
     return replicating_transform
 
 
-def close_mapping_transform(
+def close_mapping_compositor(
     mapping: Optional[Mapping] = None,
+    map_spec: Optional[Sequence[str]] = None,
     n_replicates: Optional[int] = None,
+    weave_type: Literal['maximal', 'minimal', 'strict'] = 'maximal',
+    maximum_aggregation_depth: Optional[int] = None,
+    broadcast_out_of_spec: bool = False,
+    merge_type: Optional[Literal["union", "intersection"]] = "union",
+    # fix_outer: bool = False,
+    # fix_inner: bool = False,
 ) -> callable:
-    if n_replicates is None:
-        n_replicates = len(next(iter(mapping.values())))
-    if mapping is None:
-        mapping = {}
-    for v in mapping.values():
-        assert len(v) == n_replicates, (
-            "All mapped values must have the same length")
-    def mapping_transform(
+    map_spec = map_spec or []
+    map_spec_transformer = replicate(
+        spec=map_spec,
+        weave_type=weave_type,
+        n_replicates=n_replicates,
+        maximum_aggregation_depth=maximum_aggregation_depth,
+        broadcast_out_of_spec=broadcast_out_of_spec,
+    )
+    def mapping_compositor(
         f_outer: callable,
         f_inner: callable,
-        unpack_dict: bool = True,
     ) -> callable:
         def transformed_f_outer(**f_outer_params):
             def transformed_f_inner(**f_inner_params):
                 ret = []
+                _mapping = mapping or {}
                 out = f_inner(**f_inner_params)
-                out = _dict_to_seq(out)
-                assert len(out) == n_replicates, (
-                    "The length of the output of the inner function must be "
-                    "equal to the length of the mapped values")
+                f_outer_params_mapped = map_spec_transformer(**{**f_outer_params, **out, **_mapping})
+                try:
+                    out = _dict_to_seq(out)
+                except TypeError:
+                    out = [out] # We really shouldn't enter this branch, since
+                                # the compositor does nothing in this case
+                if mapping or n_replicates:
+                    _n_replicates = n_replicates or len(next(iter(mapping.values())))
+                    assert len(out) == _n_replicates, (
+                        f"The length of the output of the inner function "
+                        f"({len(out)}) must be equal to the length of the "
+                        f"mapped values ({_n_replicates})")
                 for i, o in enumerate(out):
-                    if mapping:
-                        mapped_params = {k: v[i] for k, v in mapping.items()}
-                    if unpack_dict:
-                        f_outer_params_i = {
-                            **f_outer_params,
-                            **mapped_params,
-                            **o,
-                        }
-                        ret.append(f_outer(**f_outer_params_i))
-                    else:
-                        f_outer_params_i = {
-                            **f_outer_params,
-                            **mapped_params,
-                        }
-                        ret.append(f_outer(o, **f_outer_params_i))
-                return _seq_to_dict(ret)
+                    f_outer_params_i = {
+                        **{
+                            k: f_outer_params_mapped[k][i]
+                            if len(f_outer_params_mapped[k]) > 1
+                            else f_outer_params_mapped[k][0]
+                            for k in f_outer_params_mapped
+                        },
+                        **{k: v[i] for k, v in _mapping.items()},
+                        **o,
+                    }
+                    ret.append(f_outer(**f_outer_params_i))
+                return _seq_to_dict(ret, merge_type=merge_type)
             return transformed_f_inner
         return transformed_f_outer
-    return mapping_transform
+    return mapping_compositor
 
 
 def delayed_outer_transform(
@@ -384,3 +293,110 @@ def join(
             return join_fs
         return transform
     return split_chain
+
+
+def null_transform(
+    f: callable,
+    compositor: callable = direct_compositor,
+) -> callable:
+    return f
+
+
+def ichain(*pparams) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        for p in reversed(pparams):
+            f = p(f, compositor=compositor)
+        return f
+    return transform
+
+
+def ochain(*pparams) -> callable:
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor,
+    ) -> callable:
+        for p in pparams:
+            f = p(f, compositor=compositor)
+        return f
+    return transform
+
+
+def iochain(
+    f: callable,
+    ichain: Optional[callable] = None,
+    ochain: Optional[callable] = None,
+    compositor: callable = direct_compositor,
+) -> callable:
+    if ichain is not None:
+        f = ichain(f, compositor=compositor)
+    if ochain is not None:
+        f = ochain(f, compositor=compositor)
+    return f
+
+
+def split_chain(
+    *chains: Sequence[callable],
+    map_spec: Optional[Sequence[str]] = None,
+    weave_type: Literal['maximal', 'minimal', 'strict'] = 'maximal',
+    maximum_aggregation_depth: Optional[int] = None,
+    broadcast_out_of_spec: bool = False,
+    merge_type: Optional[Literal["union", "intersection"]] = "union",
+) -> callable:
+    map_spec = map_spec or []
+    map_spec_transformer = replicate(
+        spec=map_spec,
+        weave_type=weave_type,
+        n_replicates=len(chains),
+        maximum_aggregation_depth=maximum_aggregation_depth,
+        broadcast_out_of_spec=broadcast_out_of_spec,
+    )
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor
+    ) -> callable:
+        fs_transformed = tuple(c(f, compositor=compositor) for c in chains)
+        try:
+            fs_transformed = tuple(chain(*fs_transformed))
+        except TypeError:
+            pass
+
+        def f_transformed(**params: Mapping):
+            mapping = map_spec_transformer(**params)
+            ret = tuple(
+                fs_transformed[i](**{
+                    **params, **{**params, **{
+                        k: mapping[k][i]
+                        if len(mapping[k]) > 1 else mapping[k][0]
+                        for k in mapping
+                    }}
+                })
+                for i in range(len(fs_transformed))
+            )
+            return _seq_to_dict(ret, merge_type=merge_type)
+
+        return f_transformed
+    return transform
+
+
+def mapping_composition(
+    transform: callable,
+    map_spec: Optional[Sequence[str]] = None,
+    mapping: Optional[Mapping[str, Sequence]] = None,
+    n_replicates: Optional[int] = None,
+) -> callable:
+    mapping_compositor = close_mapping_compositor(
+        map_spec=map_spec,
+        mapping=mapping,
+        n_replicates=n_replicates,
+    )
+    def transform_(
+        f: callable,
+        compositor: Optional[callable] = None
+    ) -> callable:
+        # We override any compositor passed to the transform function
+        # with the mapping compositor.
+        return transform(f, compositor=mapping_compositor)
+    return transform_
