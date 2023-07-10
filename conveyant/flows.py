@@ -60,7 +60,7 @@ def _dict_to_seq(
     return seq
 
 
-def direct_transform(
+def direct_compositor(
     f_outer: callable,
     f_inner: callable,
     unpack_dict: bool = True,
@@ -68,13 +68,18 @@ def direct_transform(
     def transformed_f_outer(**f_outer_params):
         def transformed_f_inner(**f_inner_params):
             if unpack_dict:
-                return f_outer(**{**f_outer_params, **f_inner(**f_inner_params)})
+                return f_outer(
+                    **{**f_outer_params, **f_inner(**f_inner_params)}
+                )
             return f_outer(f_inner(**f_inner_params), **f_outer_params)
         return transformed_f_inner
     return transformed_f_outer
 
 
-def null_transform(f: callable, xfm: callable = direct_transform) -> callable:
+def null_transform(
+    f: callable,
+    compositor: callable = direct_compositor,
+) -> callable:
     return f
 
 
@@ -94,24 +99,27 @@ def split_chain(
         maximum_aggregation_depth=maximum_aggregation_depth,
         broadcast_out_of_spec=broadcast_out_of_spec,
     )
-    def transform(f: callable, xfm: callable = direct_transform) -> callable:
-        fxfm = tuple(c(f, xfm=xfm) for c in chains)
+    def transform(
+        f: callable,
+        compositor: callable = direct_compositor
+    ) -> callable:
+        fs_transformed = tuple(c(f, compositor=compositor) for c in chains)
         try:
-            fxfm = tuple(chain(*fxfm))
+            fs_transformed = tuple(chain(*fs_transformed))
         except TypeError:
             pass
 
         def f_transformed(**params: Mapping):
             mapping = map_spec_transformer(**params)
             ret = tuple(
-                fxfm[i](**{
+                fs_transformed[i](**{
                     **params, **{**params, **{
                         k: mapping[k][i]
                         if len(mapping[k]) > 1 else mapping[k][0]
                         for k in mapping
                     }}
                 })
-                for i in range(len(fxfm))
+                for i in range(len(fs_transformed))
             )
             return _seq_to_dict(ret, merge_type=merge_type)
 
@@ -122,10 +130,10 @@ def split_chain(
 def ichain(*pparams) -> callable:
     def transform(
         f: callable,
-        xfm: callable = direct_transform,
+        compositor: callable = direct_compositor,
     ) -> callable:
         for p in reversed(pparams):
-            f = p(f, xfm=xfm)
+            f = p(f, compositor=compositor)
         return f
     return transform
 
@@ -133,10 +141,10 @@ def ichain(*pparams) -> callable:
 def ochain(*pparams) -> callable:
     def transform(
         f: callable,
-        xfm: callable = direct_transform,
+        compositor: callable = direct_compositor,
     ) -> callable:
         for p in pparams:
-            f = p(f, xfm=xfm)
+            f = p(f, compositor=compositor)
         return f
     return transform
 
@@ -145,12 +153,12 @@ def iochain(
     f: callable,
     ichain: Optional[callable] = None,
     ochain: Optional[callable] = None,
-    interpreter: callable = direct_transform,
+    compositor: callable = direct_compositor,
 ) -> callable:
     if ichain is not None:
-        f = ichain(f, xfm=interpreter)
+        f = ichain(f, compositor=compositor)
     if ochain is not None:
-        f = ochain(f, xfm=interpreter)
+        f = ochain(f, compositor=compositor)
     return f
 
 
@@ -168,32 +176,32 @@ def joindata(
     return join(joining_f, join_vars)
 
 
-def map_over_sequence(
-    xfm: callable,
-    mapping: Optional[Mapping[str, Sequence]] = None,
-    n_replicates: Optional[int] = None,
-) -> callable:
-    mapping_transform = close_mapping_transform(
-        mapping=mapping,
-        n_replicates=n_replicates,
-    )
-    def transform(f: callable) -> callable:
-        return xfm(f, mapping_transform)
-    return transform
+# def map_over_sequence(
+#     xfm: callable,
+#     mapping: Optional[Mapping[str, Sequence]] = None,
+#     n_replicates: Optional[int] = None,
+# ) -> callable:
+#     mapping_transform = close_mapping_transform(
+#         mapping=mapping,
+#         n_replicates=n_replicates,
+#     )
+#     def transform(f: callable) -> callable:
+#         return xfm(f, mapping_transform)
+#     return transform
 
 
-def replicate_and_map(
-    xfm: callable,
-    mapping: Mapping[str, Sequence],
-    default_params: Literal["inner", "outer"] = "inner",
-) -> callable:
-    mapping_transform = close_replicating_transform(
-        mapping,
-        default_params=default_params,
-    )
-    def transform(f: callable) -> callable:
-        return xfm(f, mapping_transform)
-    return transform
+# def replicate_and_map(
+#     xfm: callable,
+#     mapping: Mapping[str, Sequence],
+#     default_params: Literal["inner", "outer"] = "inner",
+# ) -> callable:
+#     mapping_transform = close_replicating_transform(
+#         mapping,
+#         default_params=default_params,
+#     )
+#     def transform(f: callable) -> callable:
+#         return xfm(f, mapping_transform)
+#     return transform
 
 
 # def replicate(

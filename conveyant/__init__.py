@@ -7,7 +7,7 @@ from .flows import (
     iochain,
     split_chain,
     joindata,
-    direct_transform,
+    direct_compositor,
     null_transform,
     close_mapping_transform,
     join,

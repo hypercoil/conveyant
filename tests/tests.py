@@ -13,7 +13,7 @@ from conveyant import (
     iochain,
     split_chain,
     joindata,
-    direct_transform,
+    direct_compositor,
     null_transform,
     close_mapping_transform,
     join,
@@ -28,7 +28,7 @@ def oper(name, w, x, y, z):
 
 
 def increment_args(incr):
-    def transform(f, xfm=direct_transform):
+    def transform(f, compositor=direct_compositor):
         def transformer_f(**numeric_params):
             return {k: v + incr for k, v in numeric_params.items()}
 
@@ -41,14 +41,14 @@ def increment_args(incr):
                 k: v for k, v in params.items()
                 if k not in numeric_params
             }
-            return xfm(f, transformer_f)(**other_params)(**numeric_params)
+            return compositor(f, transformer_f)(**other_params)(**numeric_params)
 
         return f_transformed
     return transform
 
 
 def negate_args():
-    def transform(f, xfm=direct_transform):
+    def transform(f, compositor=direct_compositor):
         def transformer_f(**numeric_params):
             return {k: -v for k, v in numeric_params.items()}
 
@@ -61,30 +61,30 @@ def negate_args():
                 k: v for k, v in params.items()
                 if k not in numeric_params
             }
-            return xfm(f, transformer_f)(**other_params)(**numeric_params)
+            return compositor(f, transformer_f)(**other_params)(**numeric_params)
 
         return f_transformed
     return transform
 
 
 def name_output(name):
-    def transform(f, xfm=direct_transform):
+    def transform(f, compositor=direct_compositor):
         def transformer_f():
             return {'name': name}
 
         def f_transformed(**params):
-            return xfm(f, transformer_f)(**params)()
+            return compositor(f, transformer_f)(**params)()
         return f_transformed
     return transform
 
 
 def rename_output(old_name, new_name):
-    def transform(f, xfm=direct_transform):
+    def transform(f, compositor=direct_compositor):
         def transformer_f(**params):
             return {new_name: params.pop(old_name), **params}
 
         def f_transformed(**params):
-            return xfm(transformer_f, f)()(**params)
+            return compositor(transformer_f, f)()(**params)
         return f_transformed
     return transform
 
@@ -201,13 +201,14 @@ def test_replicate():
         assert len(v) == 3
 
 
-def test_direct_transform():
+def test_direct_compositor():
     w, x, y, z = 1, 2, 3, 4
     name = 'test'
     out = oper(name=name, w=w, x=x, y=y, z=z)
     assert out[name] == -2
 
-    transformed_oper = increment_args(incr=1)(oper, xfm=direct_transform)
+    transformed_oper = increment_args(incr=1)(
+        oper, compositor=direct_compositor)
     out = transformed_oper(name=name, w=w, x=x, y=y, z=z)
     assert out[name] == -11 / 4
 
