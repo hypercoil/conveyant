@@ -224,3 +224,68 @@ def test_direct_chains():
     io_chain = iochain(oper, i_chain, o_chain)
     out = io_chain(w=w, x=x, y=y, z=z)
     assert out['test2'] == -11 / 4
+
+
+def test_splitting_chains():
+    # wp, xp, yp, zp = 1, 2, 3, 4
+    # wn, xn, yn, zn = -1, -2, -3, -4
+    w, x, y, z = 1, 2, 3, 4
+    i_chain = ichain(
+        split_chain(
+            ichain(
+                increment_args(incr=1),
+                name_output('test'),
+            ),
+            ichain(
+                negate_args(),
+                name_output('testn'),
+            ),
+        )
+    )
+    o_chain = ochain(
+        rename_output('test', 'test2'),
+        rename_output('testn', 'testn2'),
+    )
+    io_chain = iochain(oper, i_chain, o_chain)
+    out = io_chain(w=w, x=x, y=y, z=z)
+    assert out['test2'][0] == -11 / 4
+    assert out['testn2'][0] == 10 / 3
+
+    i_chain = ichain(
+        name_output('test'),
+        split_chain(
+            ichain(
+                increment_args(incr=1),
+            ),
+            ichain(
+                negate_args(),
+            ),
+        )
+    )
+    o_chain = ochain(
+        rename_output('test', 'test2'),
+    )
+    io_chain = iochain(oper, i_chain, o_chain)
+    out = io_chain(w=w, x=x, y=y, z=z)
+    assert out['test2'][0] == -11 / 4
+    assert out['test2'][1] == 10 / 3
+
+    w, x, y, z = [1, -1], [2, -2], [3, -3], [4, -4]
+    i_chain = ichain(
+        name_output('test'),
+        split_chain(
+            ichain(
+                increment_args(incr=1),
+            ),
+            null_transform,
+            map_spec=('w', 'x', 'y', 'z'),
+        )
+    )
+    io_chain = iochain(oper, i_chain, o_chain)
+    out = io_chain(w=w, x=x, y=y, z=z)
+    assert out['test2'][0] == -11 / 4
+    assert out['test2'][1] == 10 / 3
+
+
+def test_replicating_transform():
+    pass
