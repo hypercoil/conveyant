@@ -9,6 +9,8 @@ Simple functional transformations for configuring control flows of functions.
 from itertools import chain
 from typing import Any, Literal, Mapping, Optional, Sequence
 
+from .replicate import replicate
+
 
 def _seq_to_dict(
     seq: Sequence[Mapping],
@@ -72,6 +74,51 @@ def direct_transform(
     return transformed_f_outer
 
 
+def null_transform(f: callable, xfm: callable = direct_transform) -> callable:
+    return f
+
+
+def split_chain(
+    *chains: Sequence[callable],
+    map_spec: Optional[Sequence[str]] = None,
+    weave_type: Literal['maximal', 'minimal', 'strict'] = 'maximal',
+    maximum_aggregation_depth: Optional[int] = None,
+    broadcast_out_of_spec: bool = False,
+    merge_type: Optional[Literal["union", "intersection"]] = "union",
+) -> callable:
+    map_spec = map_spec or []
+    map_spec_transformer = replicate(
+        spec=map_spec,
+        weave_type=weave_type,
+        n_replicates=len(chains),
+        maximum_aggregation_depth=maximum_aggregation_depth,
+        broadcast_out_of_spec=broadcast_out_of_spec,
+    )
+    def transform(f: callable, xfm: callable = direct_transform) -> callable:
+        fxfm = tuple(c(f, xfm=xfm) for c in chains)
+        try:
+            fxfm = tuple(chain(*fxfm))
+        except TypeError:
+            pass
+
+        def f_transformed(**params: Mapping):
+            mapping = map_spec_transformer(**params)
+            ret = tuple(
+                fxfm[i](**{
+                    **params, **{**params, **{
+                        k: mapping[k][i]
+                        if len(mapping[k]) > 1 else mapping[k][0]
+                        for k in mapping
+                    }}
+                })
+                for i in range(len(fxfm))
+            )
+            return _seq_to_dict(ret, merge_type=merge_type)
+
+        return f_transformed
+    return transform
+
+
 def ichain(*pparams) -> callable:
     def transform(
         f: callable,
@@ -105,27 +152,6 @@ def iochain(
     if ochain is not None:
         f = ochain(f, xfm=interpreter)
     return f
-
-
-def split_chain(
-    *chains: Sequence[callable],
-) -> Sequence[callable]:
-    def transform(f: callable) -> callable:
-        fxfm = tuple(c(f) for c in chains)
-        try:
-            fxfm = tuple(chain(*fxfm))
-        except TypeError:
-            pass
-
-        def f_transformed(**params: Mapping):
-            ret = tuple(
-                fx(**params)
-                for fx in fxfm
-            )
-            return _seq_to_dict(ret)
-
-        return f_transformed
-    return transform
 
 
 def joindata(
@@ -170,62 +196,39 @@ def replicate_and_map(
     return transform
 
 
-def replicate(
-    mapping: Mapping[str, Sequence] = {},
-    map_over: Sequence[str] = (),
-    additional_params: Optional[Mapping[str, Any]] = {"copy_actors": True},
-) -> callable:
-    if mapping:
-        n_vals = len(next(iter(mapping.values())))
-        for vals in mapping.values():
-            assert len(vals) == n_vals, (
-                "All values must have the same length. Perhaps you intended to "
-                "nest replications?"
-            )
-    def transform(f: callable) -> callable:
-        def f_transformed(**params: Mapping):
-            _additional_params = additional_params or {}
-            if map_over is not None:
-                #TODO: assert equal lengths
-                n_vals = len(params[map_over[0]])
-            mapped_params = {k: v for k, v in params.items() if k in map_over}
-            other_params = {k: v for k, v in params.items() if k not in map_over}
-            mapped_params = {**mapped_params, **mapping}
-            ret = []
-            for i in range(n_vals):
-                nxt = f(**{
-                    **other_params,
-                    **{k: mapped_params[k][i] for k in mapped_params},
-                    **_additional_params,
-                })
-                ret += [nxt]
-            return _seq_to_dict(ret)
+# def replicate(
+#     mapping: Mapping[str, Sequence] = {},
+#     map_over: Sequence[str] = (),
+#     additional_params: Optional[Mapping[str, Any]] = {"copy_actors": True},
+# ) -> callable:
+#     if mapping:
+#         n_vals = len(next(iter(mapping.values())))
+#         for vals in mapping.values():
+#             assert len(vals) == n_vals, (
+#                 "All values must have the same length. Perhaps you intended to "
+#                 "nest replications?"
+#             )
+#     def transform(f: callable) -> callable:
+#         def f_transformed(**params: Mapping):
+#             _additional_params = additional_params or {}
+#             if map_over is not None:
+#                 #TODO: assert equal lengths
+#                 n_vals = len(params[map_over[0]])
+#             mapped_params = {k: v for k, v in params.items() if k in map_over}
+#             other_params = {k: v for k, v in params.items() if k not in map_over}
+#             mapped_params = {**mapped_params, **mapping}
+#             ret = []
+#             for i in range(n_vals):
+#                 nxt = f(**{
+#                     **other_params,
+#                     **{k: mapped_params[k][i] for k in mapped_params},
+#                     **_additional_params,
+#                 })
+#                 ret += [nxt]
+#             return _seq_to_dict(ret)
 
-        return f_transformed
-    return transform
-
-
-def map_over_split_chain(
-    *chains: Sequence[callable],
-    mapping: Mapping[str, Sequence],
-) -> callable:
-    for vals in mapping.values():
-        assert len(chains) == len(vals), "Number of chains must match number of values."
-    def transform(f: callable) -> callable:
-        fxfm = tuple(c(f) for c in chains)
-        try:
-            fxfm = tuple(chain(*fxfm))
-        except TypeError:
-            pass
-
-        def f_transformed(**params: Mapping):
-            return tuple(
-                fxfm[i](**params, **{k: mapping[k][i] for k in mapping})
-                for i in range(len(fxfm))
-            )
-
-        return f_transformed
-    return transform
+#         return f_transformed
+#     return transform
 
 
 def close_replicating_transform(
