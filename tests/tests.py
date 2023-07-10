@@ -210,3 +210,17 @@ def test_direct_transform():
     transformed_oper = increment_args(incr=1)(oper, xfm=direct_transform)
     out = transformed_oper(name=name, w=w, x=x, y=y, z=z)
     assert out[name] == -11 / 4
+
+
+def test_direct_chains():
+    w, x, y, z = 1, 2, 3, 4
+    i_chain = ichain(
+        increment_args(incr=1),
+        name_output('test'),
+    )
+    o_chain = ochain(
+        rename_output('test', 'test2'),
+    )
+    io_chain = iochain(oper, i_chain, o_chain)
+    out = io_chain(w=w, x=x, y=y, z=z)
+    assert out['test2'] == -11 / 4

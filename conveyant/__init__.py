@@ -8,6 +8,10 @@ from .flows import (
     split_chain,
     joindata,
     direct_transform,
+    null_transform,
     close_mapping_transform,
     join,
+)
+from .replicate import (
+    replicate,
 )
