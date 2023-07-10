@@ -15,7 +15,7 @@ from conveyant import (
     joindata,
     direct_compositor,
     null_transform,
-    close_mapping_transform,
+    mapping_composition,
     join,
     replicate,
 )
@@ -85,6 +85,34 @@ def rename_output(old_name, new_name):
 
         def f_transformed(**params):
             return compositor(transformer_f, f)()(**params)
+        return f_transformed
+    return transform
+
+
+def increment_output(incr):
+    def transform(f, compositor=direct_compositor):
+        def transformer_f(**params):
+            return {k: v + incr for k, v in params.items()}
+
+        def f_transformed(**params):
+            return compositor(transformer_f, f)()(**params)
+        return f_transformed
+    return transform
+
+
+def intermediate_oper(vars):
+    def transform(f, compositor=direct_compositor):
+        def transformer_f(**params):
+            return {
+                k: [v, 2 * v, 4 * v]
+                for k, v in params.items()
+                if k in vars
+            }
+
+        def f_transformed(**params):
+            inner_params = {k: v for k, v in params.items() if k in vars}
+            outer_params = {k: v for k, v in params.items() if k not in vars}
+            return compositor(f, transformer_f)(**outer_params)(**inner_params)
         return f_transformed
     return transform
 
@@ -288,5 +316,97 @@ def test_splitting_chains():
     assert out['test2'][1] == 10 / 3
 
 
-def test_replicating_transform():
-    pass
+def test_mapping_compositor():
+    w, x, y, z = 1, 2, 3, 4
+    ref = [oper(name='test', w=w, x=x, y=y, z=z) for w, x, y, z in zip(
+        [1, 2, 4, 1, 2, 4, 1, 2, 4],
+        [2, 2, 2, 4, 4, 4, 8, 8, 8],
+        [3, 3, 3, 6, 6, 6, 12, 12, 12],
+        [4, 8, 16, 4, 8, 16, 4, 8, 16],
+    )]
+
+    i_chain = ichain(
+        name_output('test'),
+        mapping_composition(
+            intermediate_oper(['x', 'y']),
+            map_spec=('x', 'y'),
+        ),
+        mapping_composition(
+            intermediate_oper(['w', 'z']),
+            map_spec=('w', 'z'),
+        ),
+    )
+    o_chain = ochain(
+        mapping_composition(
+            increment_output(2),
+            map_spec='test',
+        ),
+    )
+    io_chain = iochain(
+        oper,
+        i_chain,
+        o_chain,
+    )
+    out = io_chain(w=w, x=x, y=y, z=z)
+    ref0 = {'test': tuple(r['test'] + 2 for r in ref)}
+    assert out == ref0
+
+    i_chain = ichain(
+        mapping_composition(
+            intermediate_oper(['x', 'y']),
+            mapping={'name': ['test1', 'test2', 'test3']},
+            map_spec=('x', 'y'),
+        ),
+        mapping_composition(
+            intermediate_oper(['w', 'z']),
+            map_spec=('w', 'z'),
+        ),
+    )
+    o_chain = ochain(
+        mapping_composition(
+            increment_output(2),
+            map_spec=['test1', 'test2', 'test3'],
+        ),
+    )
+    io_chain = iochain(
+        oper,
+        i_chain,
+        o_chain,
+    )
+    out = io_chain(w=w, x=x, y=y, z=z)
+    ref1 = {
+        'test1': tuple(r['test'] + 2 for i, r in enumerate(ref) if i // 3 == 0),
+        'test2': tuple(r['test'] + 2 for i, r in enumerate(ref) if i // 3 == 1),
+        'test3': tuple(r['test'] + 2 for i, r in enumerate(ref) if i // 3 == 2),
+    }
+    assert out == ref1
+
+    i_chain = ichain(
+        mapping_composition(
+            intermediate_oper(['x', 'y']),
+            map_spec=('x', 'y'),
+        ),
+        mapping_composition(
+            intermediate_oper(['w', 'z']),
+            mapping={'name': ['test1', 'test2', 'test3']},
+            map_spec=('w', 'z'),
+        ),
+    )
+    o_chain = ochain(
+        mapping_composition(
+            increment_output(2),
+            map_spec=['test1', 'test2', 'test3'],
+        ),
+    )
+    io_chain = iochain(
+        oper,
+        i_chain,
+        o_chain,
+    )
+    out = io_chain(w=w, x=x, y=y, z=z)
+    ref1 = {
+        'test1': tuple(r['test'] + 2 for i, r in enumerate(ref) if i % 3 == 0),
+        'test2': tuple(r['test'] + 2 for i, r in enumerate(ref) if i % 3 == 1),
+        'test3': tuple(r['test'] + 2 for i, r in enumerate(ref) if i % 3 == 2),
+    }
+    assert out == ref1
