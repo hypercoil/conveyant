@@ -12,7 +12,7 @@ from typing import Any, Literal, Mapping, Optional, Sequence
 
 def _seq_to_dict(
     seq: Sequence[Mapping],
-    chain_vars: Sequence[str] = ("plotter",),
+    #chain_vars: Sequence[str] = ("plotter",),
     merge_type: Optional[Literal["union", "intersection"]] = None,
 ) -> Mapping[str, Sequence]:
     if merge_type is None:
@@ -58,18 +58,38 @@ def _dict_to_seq(
     return seq
 
 
+def direct_transform(
+    f_outer: callable,
+    f_inner: callable,
+    unpack_dict: bool = True,
+) -> callable:
+    def transformed_f_outer(**f_outer_params):
+        def transformed_f_inner(**f_inner_params):
+            if unpack_dict:
+                return f_outer(**{**f_outer_params, **f_inner(**f_inner_params)})
+            return f_outer(f_inner(**f_inner_params), **f_outer_params)
+        return transformed_f_inner
+    return transformed_f_outer
+
+
 def ichain(*pparams) -> callable:
-    def transform(f: callable) -> callable:
+    def transform(
+        f: callable,
+        xfm: callable = direct_transform,
+    ) -> callable:
         for p in reversed(pparams):
-            f = p(f)
+            f = p(f, xfm=xfm)
         return f
     return transform
 
 
 def ochain(*pparams) -> callable:
-    def transform(f: callable) -> callable:
+    def transform(
+        f: callable,
+        xfm: callable = direct_transform,
+    ) -> callable:
         for p in pparams:
-            f = p(f)
+            f = p(f, xfm=xfm)
         return f
     return transform
 
@@ -78,11 +98,12 @@ def iochain(
     f: callable,
     ichain: Optional[callable] = None,
     ochain: Optional[callable] = None,
+    interpreter: callable = direct_transform,
 ) -> callable:
     if ichain is not None:
-        f = ichain(f)
+        f = ichain(f, xfm=interpreter)
     if ochain is not None:
-        f = ochain(f)
+        f = ochain(f, xfm=interpreter)
     return f
 
 
@@ -205,20 +226,6 @@ def map_over_split_chain(
 
         return f_transformed
     return transform
-
-
-def direct_transform(
-    f_outer: callable,
-    f_inner: callable,
-    unpack_dict: bool = True,
-) -> callable:
-    def transformed_f_outer(**f_outer_params):
-        def transformed_f_inner(**f_inner_params):
-            if unpack_dict:
-                return f_outer(**{**f_outer_params, **f_inner(**f_inner_params)})
-            return f_outer(f_inner(**f_inner_params), **f_outer_params)
-        return transformed_f_inner
-    return transformed_f_outer
 
 
 def close_replicating_transform(
