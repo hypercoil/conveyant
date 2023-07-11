@@ -15,9 +15,13 @@ from conveyant import (
     joindata,
     direct_compositor,
     null_transform,
-    mapping_composition,
+    # null_op,
+    # null_stage,
+    imapping_composition,
+    omapping_composition,
     join,
     replicate,
+    inject_params,
 )
 
 
@@ -92,6 +96,19 @@ def rename_output(old_name, new_name):
 def increment_output(incr):
     def transform(f, compositor=direct_compositor):
         def transformer_f(**params):
+            return {k: v + incr for k, v in params.items()}
+
+        def f_transformed(**params):
+            return compositor(transformer_f, f)()(**params)
+        return f_transformed
+    return transform
+
+
+def increment_output_unhoisted():
+    def transform(f, compositor=direct_compositor):
+        def transformer_f(**params):
+            print(params)
+            incr = params.pop('incr')
             return {k: v + incr for k, v in params.items()}
 
         def f_transformed(**params):
@@ -316,7 +333,7 @@ def test_splitting_chains():
     assert out['test2'][1] == 10 / 3
 
 
-def test_mapping_compositor():
+def test_omapping_compositor():
     w, x, y, z = 1, 2, 3, 4
     ref = [oper(name='test', w=w, x=x, y=y, z=z) for w, x, y, z in zip(
         [1, 2, 4, 1, 2, 4, 1, 2, 4],
@@ -327,17 +344,17 @@ def test_mapping_compositor():
 
     i_chain = ichain(
         name_output('test'),
-        mapping_composition(
+        omapping_composition(
             intermediate_oper(['x', 'y']),
             map_spec=('x', 'y'),
         ),
-        mapping_composition(
+        omapping_composition(
             intermediate_oper(['w', 'z']),
             map_spec=('w', 'z'),
         ),
     )
     o_chain = ochain(
-        mapping_composition(
+        omapping_composition(
             increment_output(2),
             map_spec='test',
         ),
@@ -352,18 +369,18 @@ def test_mapping_compositor():
     assert out == ref0
 
     i_chain = ichain(
-        mapping_composition(
+        omapping_composition(
             intermediate_oper(['x', 'y']),
             mapping={'name': ['test1', 'test2', 'test3']},
             map_spec=('x', 'y'),
         ),
-        mapping_composition(
+        omapping_composition(
             intermediate_oper(['w', 'z']),
             map_spec=('w', 'z'),
         ),
     )
     o_chain = ochain(
-        mapping_composition(
+        omapping_composition(
             increment_output(2),
             map_spec=['test1', 'test2', 'test3'],
         ),
@@ -382,18 +399,18 @@ def test_mapping_compositor():
     assert out == ref1
 
     i_chain = ichain(
-        mapping_composition(
+        omapping_composition(
             intermediate_oper(['x', 'y']),
             map_spec=('x', 'y'),
         ),
-        mapping_composition(
+        omapping_composition(
             intermediate_oper(['w', 'z']),
             mapping={'name': ['test1', 'test2', 'test3']},
             map_spec=('w', 'z'),
         ),
     )
     o_chain = ochain(
-        mapping_composition(
+        omapping_composition(
             increment_output(2),
             map_spec=['test1', 'test2', 'test3'],
         ),
@@ -410,3 +427,50 @@ def test_mapping_compositor():
         'test3': tuple(r['test'] + 2 for i, r in enumerate(ref) if i % 3 == 2),
     }
     assert out == ref1
+
+
+def test_imapping_compositor():
+    w, x, y, z = 1, 2, 3, 4
+    ref = [oper(name='test', w=wi, x=x, y=y, z=z) for wi in [1, 2, 3, 4]]
+    ref = {'test': tuple(r['test'] + 2 for r in ref)}
+    i_chain = ichain(
+        name_output('test'),
+        imapping_composition(
+            inject_params(),
+            outer_mapping={'w': [1, 2, 3, 4]},
+            map_spec='w',
+        ),
+    )
+    o_chain = ochain(
+        omapping_composition(
+            increment_output(2),
+            map_spec='test',
+        ),
+    )
+    io_chain = iochain(
+        oper,
+        i_chain,
+        o_chain,
+    )
+    out = io_chain(x=x, y=y, z=z)
+    assert out == ref
+
+    ref = oper(name='test', w=w, x=x, y=y, z=z)
+    ref = {'test': tuple(ref['test'] + i for i in [2, 3, 4, 5])}
+    i_chain = ichain(
+        name_output('test'),
+    )
+    o_chain = ochain(
+        imapping_composition(
+            increment_output_unhoisted(),
+            outer_mapping=({'incr': (2, 3, 4, 5)}),
+            map_spec='incr',
+        ),
+    )
+    io_chain = iochain(
+        oper,
+        i_chain,
+        o_chain,
+    )
+    out = io_chain(w=w, x=x, y=y, z=z)
+    assert out == ref
