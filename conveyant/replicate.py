@@ -7,6 +7,7 @@ Elementary replication
 from itertools import chain, cycle, product
 from math import prod
 from typing import Any, Literal, Optional, Sequence, Union
+
 from .config import aggregator_types
 
 
@@ -42,7 +43,8 @@ def _nominal_length(
                 _nominal_length(
                     v,
                     maximum_aggregation_depth=maximum_aggregation_depth - 1,
-                ) for v in var
+                )
+                for v in var
             )
         else:
             return 1
@@ -68,7 +70,8 @@ def _get_n_replicates(
                 params=params,
                 weave_type=weave_type,
                 maximum_aggregation_depth=maximum_aggregation_depth,
-            ) for s in spec
+            )
+            for s in spec
         )
     if isinstance(spec, list):
         return prod(gen)
@@ -82,13 +85,9 @@ def _get_n_replicates(
             assert len(set(gen)) == 1
             return gen[0]
         else:
-            raise ValueError(
-                f'Unrecognized weave_type: {weave_type}'
-            )
+            raise ValueError(f'Unrecognized weave_type: {weave_type}')
     else:
-        raise ValueError(
-            f'Unrecognized spec type: {type(spec)}'
-        )
+        raise ValueError(f'Unrecognized spec type: {type(spec)}')
 
 
 def cycle_to_length(
@@ -97,13 +96,13 @@ def cycle_to_length(
     length: int,
     maximum_aggregation_depth: Optional[int] = None,
 ) -> int:
-    l = _nominal_length(
+    nl = _nominal_length(
         var=params[var],
         maximum_aggregation_depth=maximum_aggregation_depth,
     )
     src = list(_flatten_to_depth(params[var], maximum_aggregation_depth))
-    val = src * (length // l)
-    val += src[:length % l]
+    val = src * (length // nl)
+    val += src[: length % nl]
     return val
 
 
@@ -112,15 +111,17 @@ def _tuple_spec(
     params: dict,
     maximum_aggregation_depth: Optional[int] = None,
     weave_type: Literal['maximal', 'minimal', 'strict'] = 'maximal',
-):
-    children = [_replicate(
-        spec=e,
-        params=params,
-        maximum_aggregation_depth=maximum_aggregation_depth,
-        weave_type=weave_type,
-    ) for e in spec]
+) -> Sequence:
+    children = [
+        _replicate(
+            spec=e,
+            params=params,
+            maximum_aggregation_depth=maximum_aggregation_depth,
+            weave_type=weave_type,
+        )
+        for e in spec
+    ]
     children = list(_flatten_to_depth(children, depth=1))
-    #print('children', children)
     if weave_type == 'minimal':
         return list(zip(*zip(*children)))
     elif weave_type == 'strict':
@@ -128,9 +129,11 @@ def _tuple_spec(
     elif weave_type == 'maximal':
         ll = [len(e) for e in children]
         argmax = ll.index(max(ll))
-        #print(ll, argmax)
-        l = [cycle(children[i]) if i != argmax else children[i] for i in range(len(children))]
-        return list(zip(*zip(*l)))
+        _children = [
+            cycle(children[i]) if i != argmax else children[i]
+            for i in range(len(children))
+        ]
+        return list(zip(*zip(*_children)))
 
 
 def _replicate(
@@ -140,19 +143,24 @@ def _replicate(
     weave_type: Literal['maximal', 'minimal', 'strict'] = 'maximal',
 ) -> Sequence:
     if isinstance(spec, str):
-        return [list(_flatten_to_depth(
-            params[spec],
-            maximum_aggregation_depth,
-        ))]
+        return [
+            list(
+                _flatten_to_depth(
+                    params[spec],
+                    maximum_aggregation_depth,
+                )
+            )
+        ]
     elif isinstance(spec, list):
-        children = [_replicate(
-            spec=e,
-            params=params,
-            maximum_aggregation_depth=maximum_aggregation_depth,
-            weave_type=weave_type,
-        )
-        for e in spec]
-        #print(spec, children)
+        children = [
+            _replicate(
+                spec=e,
+                params=params,
+                maximum_aggregation_depth=maximum_aggregation_depth,
+                weave_type=weave_type,
+            )
+            for e in spec
+        ]
         # God save us all
         transposed = list(product(*[list(zip(*v)) for v in children]))
         return list(zip(*[chain(*v) for v in transposed]))
@@ -184,7 +192,8 @@ def replicate(
                     _nominal_length(
                         var=params[k],
                         maximum_aggregation_depth=maximum_aggregation_depth,
-                    ) for k in params.keys()
+                    )
+                    for k in params.keys()
                 )
             else:
                 _n_replicates = _get_n_replicates(
@@ -200,10 +209,7 @@ def replicate(
             maximum_aggregation_depth=maximum_aggregation_depth,
             weave_type=weave_type,
         )
-        repl_params = {
-            k: v
-            for k, v in zip(spec_flat, repl_vals)
-        }
+        repl_params = {k: v for k, v in zip(spec_flat, repl_vals)}
         for k in repl_params.keys():
             repl_params[k] = cycle_to_length(
                 var=k,

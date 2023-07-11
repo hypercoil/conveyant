@@ -11,10 +11,10 @@ from typing import Any, Literal, Mapping, Optional, Sequence
 
 from .compositors import (
     _seq_to_dict,
-    direct_compositor,
     close_imapping_compositor,
     close_omapping_compositor,
     delayed_outer_compositor,
+    direct_compositor,
 )
 from .replicate import replicate
 
@@ -89,7 +89,7 @@ def split_chain(
     weave_type: Literal['maximal', 'minimal', 'strict'] = 'maximal',
     maximum_aggregation_depth: Optional[int] = None,
     broadcast_out_of_spec: bool = False,
-    merge_type: Optional[Literal["union", "intersection"]] = "union",
+    merge_type: Optional[Literal['union', 'intersection']] = 'union',
 ) -> callable:
     map_spec = map_spec or []
     map_spec_transformer = replicate(
@@ -101,7 +101,7 @@ def split_chain(
     )
     def transform(
         f: callable,
-        compositor: callable = direct_compositor
+        compositor: callable = direct_compositor,
     ) -> callable:
         fs_transformed = tuple(c(f, compositor=compositor) for c in chains)
         try:
@@ -112,13 +112,17 @@ def split_chain(
         def f_transformed(**params: Mapping):
             mapping = map_spec_transformer(**params)
             ret = tuple(
-                fs_transformed[i](**{
-                    **params, **{**params, **{
-                        k: mapping[k][i]
-                        if len(mapping[k]) > 1 else mapping[k][0]
-                        for k in mapping
-                    }}
-                })
+                fs_transformed[i](
+                    **{
+                        **params,
+                        **{
+                            k: mapping[k][i]
+                            if len(mapping[k]) > 1
+                            else mapping[k][0]
+                            for k in mapping
+                        },
+                    }
+                )
                 for i in range(len(fs_transformed))
             )
             return _seq_to_dict(ret, merge_type=merge_type)
@@ -142,7 +146,7 @@ def imapping_composition(
     )
     def transform_(
         f: callable,
-        compositor: Optional[callable] = None
+        compositor: Optional[callable] = None,
     ) -> callable:
         # We override any compositor passed to the transform function
         # with the mapping compositor.
@@ -163,7 +167,7 @@ def omapping_composition(
     )
     def transform_(
         f: callable,
-        compositor: Optional[callable] = None
+        compositor: Optional[callable] = None,
     ) -> callable:
         # We override any compositor passed to the transform function
         # with the mapping compositor.
@@ -214,7 +218,7 @@ def join(
     def split_chain(*chains: Sequence[callable]) -> callable:
         def transform(
             f: callable,
-            compositor:  Optional[callable] = None,
+            compositor: Optional[callable] = None,
         ) -> callable:
             fs = [
                 chain(f, compositor=delayed_outer_compositor)
@@ -226,7 +230,7 @@ def join(
                 out = tuple(zip(*out))
                 f_outer = out[1][0]
                 f_outer_params = out[2][0]
-                out = _seq_to_dict(out[0], merge_type="union")
+                out = _seq_to_dict(out[0], merge_type='union')
                 jvars = join_vars or tuple(out.keys())
 
                 for k, v in out.items():
@@ -243,7 +247,7 @@ def join(
 
 def joindata(
     join_vars: Optional[Sequence[str]] = None,
-    how: Literal["outer", "inner"] = "outer",
+    how: Literal['outer', 'inner'] = 'outer',
     fill_value: Any = None,
 ) -> callable:
     def joining_f(arg):
