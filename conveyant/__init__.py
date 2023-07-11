@@ -12,6 +12,8 @@ from .flows import (
     close_omapping_compositor,
     imapping_composition,
     omapping_composition,
+    imap,
+    omap,
     null_transform,
     join,
     inject_params,
