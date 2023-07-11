@@ -19,6 +19,8 @@ from conveyant import (
     # null_stage,
     imapping_composition,
     omapping_composition,
+    imap,
+    omap,
     join,
     replicate,
     inject_params,
@@ -473,4 +475,29 @@ def test_imapping_compositor():
         o_chain,
     )
     out = io_chain(w=w, x=x, y=y, z=z)
+    assert out == ref
+
+
+def test_imap_omap_convenience():
+    w, x, y, z = 1, 2, 3, 4
+    ref = [oper(name='test', w=wi, x=x, y=y, z=z) for wi in [1, 2, 3, 4]]
+    ref = {'test': tuple(r['test'] + 2 for r in ref)}
+    i_chain = ichain(
+        name_output('test'),
+        imap(
+            mapping={'w': [1, 2, 3, 4]},
+        ),
+    )
+    o_chain = ochain(
+        omap(
+            increment_output(2),
+            map_spec='test',
+        ),
+    )
+    io_chain = iochain(
+        oper,
+        i_chain,
+        o_chain,
+    )
+    out = io_chain(x=x, y=y, z=z)
     assert out == ref
