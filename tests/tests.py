@@ -479,7 +479,7 @@ def test_imapping_compositor():
 
 
 def test_imap_omap_convenience():
-    w, x, y, z = 1, 2, 3, 4
+    x, y, z = 2, 3, 4
     ref = [oper(name='test', w=wi, x=x, y=y, z=z) for wi in [1, 2, 3, 4]]
     ref = {'test': tuple(r['test'] + 2 for r in ref)}
     i_chain = ichain(
@@ -500,4 +500,38 @@ def test_imap_omap_convenience():
         o_chain,
     )
     out = io_chain(x=x, y=y, z=z)
+    assert out == ref
+
+
+def test_join():
+    w, x, y, z = 1, 2, 3, 4
+    wr, xr, yr, zr = sum([1, 2, 4]), sum([2, 4, 8]), sum([3, 6, 12]), sum([4, 8, 16])
+    ref = oper(name='test', w=wr, x=xr, y=yr, z=zr)
+    ref['test'] += 2
+
+    i_chain = ichain(
+        name_output('test'),
+        join(joining_f=sum, join_vars=('w', 'x', 'y', 'z'))(
+            intermediate_oper(['x', 'y']),
+            intermediate_oper(['w', 'z']),
+        ),
+    )
+    o_chain = ochain(
+        join(joining_f=sum, join_vars=('test'))(
+            ochain(
+                omapping_composition(
+                    increment_output(2),
+                    map_spec='test',
+                ),
+                inject_params(),
+            ),
+        ),
+    )
+    o_chain = increment_output(2)
+    io_chain = iochain(
+        oper,
+        i_chain,
+        o_chain,
+    )
+    out = io_chain(w=w, x=x, y=y, z=z)
     assert out == ref
