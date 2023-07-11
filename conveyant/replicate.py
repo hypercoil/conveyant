@@ -36,13 +36,8 @@ def _nominal_length(
 ) -> int:
     if isinstance(var, aggregator_types):
         if maximum_aggregation_depth is None:
-            return sum(
-                _nominal_length(
-                    v,
-                    maximum_aggregation_depth=None
-                ) for v in var
-            )
-        elif maximum_aggregation_depth > 0:
+            maximum_aggregation_depth = float('inf')
+        if maximum_aggregation_depth > 0:
             return sum(
                 _nominal_length(
                     v,

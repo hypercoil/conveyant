@@ -8,10 +8,13 @@ from .flows import (
     split_chain,
     joindata,
     direct_compositor,
-    close_mapping_compositor,
-    mapping_composition,
+    close_imapping_compositor,
+    close_omapping_compositor,
+    imapping_composition,
+    omapping_composition,
     null_transform,
     join,
+    inject_params,
 )
 from .replicate import (
     replicate,
