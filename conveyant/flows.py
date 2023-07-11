@@ -212,10 +212,20 @@ def close_omapping_compositor(
     return omapping_compositor
 
 
-def delayed_outer_transform(
+# def delayed_compositor(
+#     f_outer: callable,
+#     f_inner: callable,
+# ) -> callable:
+#     def transformed_f_outer(**f_outer_params):
+#         def transformed_f_inner(**f_inner_params):
+#             return f_outer, f_outer_params, f_inner, f_inner_params
+#         return transformed_f_inner
+#     return transformed_f_outer
+
+
+def delayed_outer_compositor(
     f_outer: callable,
     f_inner: callable,
-    unpack_dict: Any = None,
 ) -> callable:
     def transformed_f_outer(**f_outer_params):
         def transformed_f_inner(**f_inner_params):
@@ -225,38 +235,7 @@ def delayed_outer_transform(
     return transformed_f_outer
 
 
-def join(
-    joining_f: callable,
-    join_vars: Optional[Sequence[str]] = None,
-    unpack_dict: bool = True,
-) -> callable:
-    def split_chain(*chains: Sequence[callable]) -> callable:
-        def transform(f: callable) -> callable:
-            fs = [chain(f, delayed_outer_transform) for chain in chains]
-
-            def join_fs(**params):
-                out = [f(**params) for f in fs]
-                out = tuple(zip(*out))
-                f_outer = out[1][0]
-                f_outer_params = out[2][0]
-                out = _seq_to_dict(out[0], merge_type="union")
-                jvars = join_vars or tuple(out.keys())
-
-                for k, v in out.items():
-                    if k not in jvars:
-                        out[k] = v[0]
-                        continue
-                    out[k] = joining_f(v)
-                if unpack_dict:
-                    return f_outer(**{**f_outer_params, **out})
-                return f_outer(out, **f_outer_params)
-
-            return join_fs
-        return transform
-    return split_chain
-
-
-def null_op(**params):
+def null_prim(**params):
     return params
 
 
@@ -442,3 +421,37 @@ def omap(
         map_spec=map_spec,
         n_replicates=n_replicates,
     )
+
+
+def join(
+    joining_f: callable,
+    join_vars: Optional[Sequence[str]] = None,
+) -> callable:
+    def split_chain(*chains: Sequence[callable]) -> callable:
+        def transform(
+            f: callable,
+            compositor:  Optional[callable] = None,
+        ) -> callable:
+            fs = [
+                chain(f, compositor=delayed_outer_compositor)
+                for chain in chains
+            ]
+
+            def join_fs(**params):
+                out = [f(**params) for f in fs]
+                out = tuple(zip(*out))
+                f_outer = out[1][0]
+                f_outer_params = out[2][0]
+                out = _seq_to_dict(out[0], merge_type="union")
+                jvars = join_vars or tuple(out.keys())
+
+                for k, v in out.items():
+                    if k not in jvars:
+                        out[k] = v[0]
+                        continue
+                    out[k] = joining_f(v)
+                return f_outer(**{**f_outer_params, **out})
+
+            return join_fs
+        return transform
+    return split_chain
