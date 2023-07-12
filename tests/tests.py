@@ -24,6 +24,10 @@ from conveyant import (
     join,
     replicate,
     inject_params,
+    PipelineArgument as A,
+    PipelineStage as S,
+    SanitisedFunctionWrapper as F,
+    SanitisedPartialApplication as P,
 )
 
 
@@ -533,5 +537,41 @@ def test_join():
         i_chain,
         o_chain,
     )
+    out = io_chain(w=w, x=x, y=y, z=z)
+    assert out == ref
+
+
+def test_sanitisers():
+    fn = F(oper)
+    assert repr(fn) == "oper"
+    assert fn('test', 1, 2, 3, 4) == oper('test', 1, 2, 3, 4)
+
+    ptl = P(oper, 'test', w=1, x=2)
+    assert repr(ptl) == "oper(test, w=1, x=2)"
+    ptl = P(oper, name='test', w=1, x=2)
+    assert repr(ptl) == "oper(name=test, w=1, x=2)"
+    ptl = P(oper, 'test', 1, 2)
+    assert repr(ptl) == "oper(test, 1, 2)"
+    assert ptl(y=3, z=4) == oper(name='test', w=1, x=2, y=3, z=4)
+
+    w, x, y, z = 1, 2, 3, 4
+    i_chain = ichain(
+        increment_args(incr=1),
+        name_output('test'),
+    )
+    o_chain = ochain(
+        rename_output('test', 'test2'),
+    )
+    io_chain = iochain(oper, i_chain, o_chain)
+    ref = io_chain(w=w, x=x, y=y, z=z)
+
+    i_chain = ichain(
+        S(increment_args, A(incr=1)),
+        S(name_output, A('test')),
+    )
+    o_chain = ochain(
+        S(rename_output, A('test', 'test2')),
+    )
+    io_chain = iochain(oper, i_chain, o_chain)
     out = io_chain(w=w, x=x, y=y, z=z)
     assert out == ref
