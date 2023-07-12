@@ -39,3 +39,8 @@ def report(session):
         'html',
         "--omit='*test*,*__init__*'",
     )
+    session.run(
+        'coverage',
+        'xml',
+        "--omit='*test*,*__init__*'",
+    )

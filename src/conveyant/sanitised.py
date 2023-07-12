@@ -5,7 +5,7 @@
 Sanitised function wrappers
 """
 import dataclasses
-from typing import Callable, Mapping, Optional, Sequence
+from typing import Callable, Mapping, Sequence
 
 
 @dataclasses.dataclass
@@ -37,10 +37,10 @@ class SanitisedPartialApplication:
         elif params:
             all_params = params
         return f"{self.f.__name__}({all_params})"
-    
+
     def __repr__(self):
         return self.__str__()
-    
+
     def __call__(self, *pparams, **params):
         return self.f(*self.pparams, *pparams, **self.params, **params)
 
