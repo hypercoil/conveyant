@@ -24,3 +24,9 @@ from .flows import (
 from .replicate import (
     replicate,
 )
+from .sanitised import (
+    PipelineArgument,
+    PipelineStage,
+    SanitisedFunctionWrapper,
+    SanitisedPartialApplication,
+)
