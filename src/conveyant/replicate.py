@@ -22,6 +22,8 @@ def _flatten(xs):
 
 
 def _flatten_to_depth(xs, depth):
+    if depth is None:
+        depth = float('inf')
     if not isinstance(xs, aggregator_types):
         xs = (xs,)
     for x in xs:
