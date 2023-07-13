@@ -8,8 +8,6 @@ import dataclasses
 import inspect
 from typing import Callable, Mapping, Sequence
 
-from .config import aggregator_types
-
 
 @dataclasses.dataclass(frozen=True)
 class Primitive:
@@ -37,9 +35,10 @@ class Primitive:
             if k in inspect.signature(self.f).parameters
         }
         out = self.f(**valid_params)
-        if not isinstance(out, aggregator_types):
-            out = (out,)
-        out = {k: v for k, v in zip(self.output, out)}
+        if len(self.output) == 1:
+            out = {self.output[0]: out}
+        else:
+            out = {k: v for k, v in zip(self.output, out)}
         if self.forward_unused:
             return {**extra_params, **out}
         else:
