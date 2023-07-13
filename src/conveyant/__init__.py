@@ -7,6 +7,13 @@ from .compositors import (
     delayed_outer_compositor,
     direct_compositor,
 )
+from .containers import (
+    PipelineArgument,
+    PipelineStage,
+    Primitive,
+    SanitisedFunctionWrapper,
+    SanitisedPartialApplication,
+)
 from .flows import (
     ichain,
     imap,
@@ -23,10 +30,4 @@ from .flows import (
 )
 from .replicate import (
     replicate,
-)
-from .sanitised import (
-    PipelineArgument,
-    PipelineStage,
-    SanitisedFunctionWrapper,
-    SanitisedPartialApplication,
 )

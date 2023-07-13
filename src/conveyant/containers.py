@@ -2,10 +2,54 @@
 # emacs: -*- mode: python; py-indent-offset: 4; indent-tabs-mode: nil -*-
 # vi: set ft=python sts=4 ts=4 sw=4 et:
 """
-Sanitised function wrappers
+Functional containers and sanitised wrappers for safe pickling
 """
 import dataclasses
+import inspect
 from typing import Callable, Mapping, Sequence
+
+from .config import aggregator_types
+
+
+@dataclasses.dataclass(frozen=True)
+class Primitive:
+    """
+    Primitive function wrapper.
+
+    Forces all arguments to be keyword arguments and forces the wrapped
+    function to return a dictionary. Furthermore, any arguments that are
+    not specified in the signature of the wrapped function are optionally
+    passed directly into the output.
+    """
+
+    f: Callable
+    name: str
+    output: Sequence[str]
+    forward_unused: bool = False
+
+    def __call__(self, **params):
+        extra_params = {
+            k: v for k, v in params.items()
+            if k not in inspect.signature(self.f).parameters
+        }
+        valid_params = {
+            k: v for k, v in params.items()
+            if k in inspect.signature(self.f).parameters
+        }
+        out = self.f(**valid_params)
+        if not isinstance(out, aggregator_types):
+            out = (out,)
+        out = {k: v for k, v in zip(self.output, out)}
+        if self.forward_unused:
+            return {**extra_params, **out}
+        else:
+            return out
+
+    def __str__(self):
+        return f"Primitive({self.name})"
+
+    def __repr__(self):
+        return str(self)
 
 
 @dataclasses.dataclass
