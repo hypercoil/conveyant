@@ -114,7 +114,6 @@ def increment_output(incr):
 def increment_output_unhoisted():
     def transform(f, compositor=direct_compositor):
         def transformer_f(**params):
-            print(params)
             incr = params.pop('incr')
             return {k: v + incr for k, v in params.items()}
 
@@ -158,8 +157,8 @@ def test_replicate():
     params_out = transformer(**params)
     assert params_out['a'] == [1, 1, 1, 2, 2, 2, 3, 3, 3]
     assert params_out['b'] == [4, 5, 6, 4, 5, 6, 4, 5, 6]
-    assert params_out['c'] == [7, 8, 9]
-    assert params_out['d'] == [10, 11, 12]
+    assert params_out['c'] == [[7, 8, 9]]
+    assert params_out['d'] == [[10, 11, 12]]
 
     transformer = replicate(
         spec=spec,

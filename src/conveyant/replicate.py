@@ -229,7 +229,7 @@ def replicate(
         else:
             for k, v in params.items():
                 if k not in spec_flat:
-                    repl_params[k] = v
+                    repl_params[k] = [v]
 
         repl_params = {
             k: list(v) if type(v) in aggregator_types else [v]
