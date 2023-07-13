@@ -616,3 +616,25 @@ def test_primitive():
         forward_unused=True,
     )
     assert null2_p(x=1, y=2) == {'x': 1, 'y': 2}
+
+    oper_p = Primitive(
+        oper,
+        name='oper',
+        output=None,
+        forward_unused=False,
+    )
+    assert (
+        oper_p(name='test', v=0, w=1, x=2, y=3, z=4) ==
+        oper('test', 1, 2, 3, 4)
+    )
+
+    def null2(x, y):
+        return x, y
+    null2_p = Primitive(
+        null2,
+        name='null2',
+        output=None,
+        forward_unused=True,
+    )
+    with pytest.raises(TypeError):
+        null2_p(x=1, y=2)

@@ -35,7 +35,14 @@ class Primitive:
             if k in inspect.signature(self.f).parameters
         }
         out = self.f(**valid_params)
-        if len(self.output) == 1:
+        if self.output is None:
+            if not isinstance(out, dict):
+                raise TypeError(
+                    f'Primitive {self.name} has output spec `None`, so the '
+                    f'wrapped function must return a dictionary. Instead, '
+                    f'got {out}.'
+                )
+        elif len(self.output) == 1:
             out = {self.output[0]: out}
         else:
             out = {k: v for k, v in zip(self.output, out)}
