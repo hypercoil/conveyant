@@ -28,6 +28,7 @@ from conveyant import (
     PipelineStage as S,
     SanitisedFunctionWrapper as F,
     SanitisedPartialApplication as P,
+    Primitive,
 )
 
 
@@ -575,3 +576,34 @@ def test_sanitisers():
     io_chain = iochain(oper, i_chain, o_chain)
     out = io_chain(w=w, x=x, y=y, z=z)
     assert out == ref
+
+
+def test_primitive():
+    oper_p = Primitive(
+        oper,
+        name='oper',
+        output=('output',),
+        forward_unused=True,
+    )
+    assert repr(oper_p) == "Primitive(oper)"
+    assert (
+        oper_p(name='test', w=1, x=2, y=3, z=4) ==
+        {'output': oper('test', 1, 2, 3, 4)}
+    )
+    assert (
+        oper_p(name='test', v=0, w=1, x=2, y=3, z=4) ==
+        {'output': oper('test', 1, 2, 3, 4), 'v': 0}
+    )
+    with pytest.raises(TypeError):
+        oper_p('test', 1, 2, 3, 4)
+
+    oper_p = Primitive(
+        oper,
+        name='oper',
+        output=('output',),
+        forward_unused=False,
+    )
+    assert (
+        oper_p(name='test', v=0, w=1, x=2, y=3, z=4) ==
+        {'output': oper('test', 1, 2, 3, 4)}
+    )
