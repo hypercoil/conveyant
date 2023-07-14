@@ -32,6 +32,13 @@ from conveyant import (
 )
 
 
+class UnknownCallable:
+    def __init__(self, f):
+        self.f = f
+    def __call__(self, *pparams, **params):
+        return self.f(*pparams, **params)
+
+
 def oper(name, w, x, y, z):
     # print(f'{name}: {w}, {x}, {y}, {z}')
     # print({name: (2 * w - x * z) / y})
@@ -138,6 +145,10 @@ def intermediate_oper(vars):
             return compositor(f, transformer_f)(**outer_params)(**inner_params)
         return f_transformed
     return transform
+
+
+def consume_all(all):
+    pass
 
 
 def test_replicate():
@@ -548,6 +559,10 @@ def test_sanitisers():
 
     ptl = P(oper, 'test', w=1, x=2)
     assert repr(ptl) == "oper(test, w=1, x=2)"
+    ptl = ptl.bind(y=3, z=4)
+    assert repr(ptl) == "oper(test, w=1, x=2, y=3, z=4)"
+    assert ptl() == oper(name='test', w=1, x=2, y=3, z=4)
+
     ptl = P(oper, name='test', w=1, x=2)
     assert repr(ptl) == "oper(name=test, w=1, x=2)"
     ptl = P(oper, 'test', 1, 2)
@@ -576,6 +591,11 @@ def test_sanitisers():
     out = io_chain(w=w, x=x, y=y, z=z)
     assert out == ref
 
+    fn = F(UnknownCallable(oper))
+    ptl = P(UnknownCallable(oper), 'test', w=1, x=2)
+    assert repr(fn) == 'wrapped UnknownCallable'
+    assert repr(ptl) == '(wrapped UnknownCallable)(test, w=1, x=2)'
+
 
 def test_primitive():
     oper_p = Primitive(
@@ -584,7 +604,11 @@ def test_primitive():
         output=('output',),
         forward_unused=True,
     )
+    fn = F(oper_p)
+    ptl = P(oper_p, 'test', w=1, x=2)
     assert repr(oper_p) == "Primitive(oper)"
+    assert repr(fn) == "Primitive(oper)"
+    assert repr(ptl) == "Primitive(oper)(test, w=1, x=2)"
     assert (
         oper_p(name='test', w=1, x=2, y=3, z=4) ==
         {'output': oper('test', 1, 2, 3, 4)}
@@ -638,3 +662,11 @@ def test_primitive():
     )
     with pytest.raises(TypeError):
         null2_p(x=1, y=2)
+
+    consume_p = Primitive(
+        consume_all,
+        name='consume_all',
+        output=(),
+        forward_unused=True,
+    )
+    assert consume_p(all=0) == {}

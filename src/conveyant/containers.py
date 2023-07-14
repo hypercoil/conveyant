@@ -27,11 +27,13 @@ class Primitive:
 
     def __call__(self, **params):
         extra_params = {
-            k: v for k, v in params.items()
+            k: v
+            for k, v in params.items()
             if k not in inspect.signature(self.f).parameters
         }
         valid_params = {
-            k: v for k, v in params.items()
+            k: v
+            for k, v in params.items()
             if k in inspect.signature(self.f).parameters
         }
         out = self.f(**valid_params)
@@ -42,6 +44,8 @@ class Primitive:
                     f'wrapped function must return a dictionary. Instead, '
                     f'got {out}.'
                 )
+        elif len(self.output) == 0:
+            out = {}
         elif len(self.output) == 1:
             out = {self.output[0]: out}
         else:
@@ -52,7 +56,7 @@ class Primitive:
             return out
 
     def __str__(self):
-        return f"Primitive({self.name})"
+        return f'Primitive({self.name})'
 
     def __repr__(self):
         return str(self)
@@ -62,7 +66,12 @@ class Primitive:
 class SanitisedFunctionWrapper:
     f: Callable
     def __str__(self):
-        return self.f.__name__
+        if isinstance(self.f, Primitive):
+            return str(self.f)
+        try:
+            return self.f.__name__
+        except AttributeError:
+            return f'wrapped {type(self.f).__name__}'
 
     def __repr__(self):
         return self.__str__()
@@ -72,21 +81,48 @@ class SanitisedFunctionWrapper:
 
 
 class SanitisedPartialApplication:
-    def __init__(self, f: Callable, *pparams: Sequence, **params: Mapping):
+    def __init__(
+        self,
+        f: Callable,
+        *pparams: Sequence,
+        __allowed__: Sequence[str] = None,
+        **params: Mapping,
+    ):
         self.f = f
         self.pparams = pparams
         self.params = params
+        self.__allowed__ = __allowed__
+
+    def bind(self, *pparams: Sequence, **params: Mapping):
+        if self.__allowed__ is not None:
+            params = {
+                k: v for k, v in params.items()
+                if k in self.__allowed__
+            }
+        return SanitisedPartialApplication(
+            self.f,
+            *self.pparams,
+            *pparams,
+            **self.params,
+            **params,
+            __allowed__=self.__allowed__,
+        )
 
     def __str__(self):
-        pparams = ", ".join([str(p) for p in self.pparams])
-        params = ", ".join([f"{k}={v}" for k, v in self.params.items()])
+        pparams = ', '.join([str(p) for p in self.pparams])
+        params = ', '.join([f'{k}={v}' for k, v in self.params.items()])
         if pparams and params:
-            all_params = ", ".join([pparams, params])
+            all_params = ', '.join([pparams, params])
         elif pparams:
             all_params = pparams
         elif params:
             all_params = params
-        return f"{self.f.__name__}({all_params})"
+        if isinstance(self.f, Primitive):
+            return f'{self.f}({all_params})'
+        try:
+            return f'{self.f.__name__}({all_params})'
+        except AttributeError:
+            return f'(wrapped {type(self.f).__name__})({all_params})'
 
     def __repr__(self):
         return self.__str__()
@@ -106,7 +142,8 @@ class PipelineArgument:
 class PipelineStage:
     f: callable
     args: PipelineArgument = dataclasses.field(
-        default_factory=PipelineArgument)
+        default_factory=PipelineArgument
+    )
     split: bool = False
 
     def __post_init__(self):
