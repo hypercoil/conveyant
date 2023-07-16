@@ -187,6 +187,14 @@ def replicate(
             f'aggregator_types must contain list: {aggregator_types}'
         )
     def transformer(**params):
+        # Empty sequences will break the replicator logic, so we replace them
+        # with None
+        _empty_seq = {}
+        for k, v in params.items():
+            if isinstance(v, aggregator_types) and len(v) == 0:
+                params[k] = None
+                _empty_seq[k] = v
+
         _n_replicates = n_replicates
         if n_replicates is None:
             if not spec:
@@ -237,6 +245,13 @@ def replicate(
             k: list(v) if type(v) in aggregator_types else [v]
             for k, v in repl_params.items()
         }
+
+        # Restore empty sequences
+        for k, v in _empty_seq.items():
+            if broadcast_out_of_spec:
+                repl_params[k] = [v] * _n_replicates
+            else:
+                repl_params[k] = [v]
 
         return repl_params
     return transformer
