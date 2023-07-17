@@ -611,8 +611,16 @@ def test_sanitisers():
     fn = F(oper)
     assert repr(fn) == "oper"
     assert fn('test', 1, 2, 3, 4) == oper('test', 1, 2, 3, 4)
+    fn2 = fn.bind(w=1, x=2)
+    assert isinstance(fn2, F)
+    assert fn2 is fn
 
-    ptl = P(oper, 'test', w=1, x=2)
+    fn = F(oper, __allowed__=('w', 'x', 'y', 'z'))
+    ptl = fn.bind(w=1, x=2)
+    assert isinstance(ptl, P)
+    assert repr(ptl) == "oper(w=1, x=2)"
+
+    ptl = P(oper, 'test', w=1, x=2, __allowed__=('y', 'z'))
     assert repr(ptl) == "oper(test, w=1, x=2)"
     ptl = ptl.bind(y=3, z=4)
     assert repr(ptl) == "oper(test, w=1, x=2, y=3, z=4)"
@@ -728,18 +736,76 @@ def test_primitive():
 
 
 def test_composition():
-
     c = Composition(
         compositor=direct_compositor,
-        f=P(increment_output_p, incr=1),
-        g=oper,
-    ).bind()
+        outer=P(increment_output_p, incr=1),
+        inner=oper,
+    ).bind_curried()
+    assert c.curried_fn == 'outer'
     assert c(name='test', w=1, x=2, y=3, z=4) == {'test': -1}
+    c2 = c.bind(w=1, x=2, y=3, z=4)
+    assert isinstance(c2.outer, P)
 
     c = Composition(
         compositor=reversed_args_compositor,
-        f=P(increment_output_p, incr=1),
-        g=oper,
+        outer=P(increment_output_p, incr=1),
+        inner=oper,
     )
-    c = c.bind(name='test', w=1, x=2, y=3, z=4)
+    c = c.bind_curried(name='test', w=1, x=2, y=3, z=4)
+    assert c.curried_fn == 'inner'
     assert c() == {'test': -1}
+    c2 = c.bind(a=1, b=2, c=3, d=4) # no effect
+    assert c2 == c
+
+    def add_args(a, b):
+        return {'e': a + b}
+
+    def mul_args(c, d):
+        return {'b': c * d}
+
+    # TODO: Oh, no -- we cannot use ``f`` as a variable name! This is because
+    #       ``f`` is a reserved name in several container classes. We need to
+    #       fix this by using reserved names that are less likely to be used
+    #       as variable names. For instance, underscore-prefixed names are
+    #       much less likely to be used as variable names.
+    def div_args(e, g):
+        return {'h': e / g}
+
+    c0 = Composition(
+        compositor=direct_compositor,
+        outer=add_args,
+        inner=mul_args,
+        __allowed__=('c', 'd'),
+    ).bind_curried(a=2)
+    assert c0.curried_fn == 'outer'
+    assert c0(c=1, d=1)['e'] == 3
+    assert c0.bind(c=1)(d=1)['e'] == 3
+
+    c0 = Composition(
+        compositor=reversed_args_compositor,
+        outer=add_args,
+        inner=mul_args,
+        __allowed__=('a',),
+    ).bind_curried(c=1, d=1)
+    assert c0.curried_fn == 'inner'
+    assert c0(a=2)['e'] == 3
+    assert c0.bind(a=2)()['e'] == 3
+
+    c1 = Composition(
+        compositor=direct_compositor,
+        outer=div_args,
+        inner=c0,
+    ).bind_curried(g=2)
+    assert c1.curried_fn == 'outer'
+    assert c1(a=2)['h'] == 1.5
+    assert c1.bind()(a=2)['h'] == 1.5
+
+    c1 = Composition(
+        compositor=reversed_args_compositor,
+        outer=div_args,
+        inner=c0,
+        __allowed__=('g',),
+    ).bind_curried(a=2)
+    assert c1.curried_fn == 'inner'
+    assert c1(g=2)['h'] == 1.5
+    assert c1.bind(g=2)()['h'] == 1.5
