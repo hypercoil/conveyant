@@ -153,3 +153,31 @@ class PipelineStage:
         return self.f(*self.args.pparams, **self.args.params)(
             *pparams, **params
         )
+
+
+@dataclasses.dataclass
+class Composition:
+    compositor: callable
+    f: callable
+    g: callable
+    curried_params: PipelineArgument = dataclasses.field(
+        default_factory=PipelineArgument
+    )
+
+    def __post_init__(self):
+        self.compositor = SanitisedFunctionWrapper(self.compositor)
+        self.f = SanitisedFunctionWrapper(self.f)
+        self.g = SanitisedFunctionWrapper(self.g)
+
+    def bind(self, **params):
+        return Composition(
+            self.compositor,
+            self.f,
+            self.g,
+            curried_params=PipelineArgument(**params),
+        )
+
+    def __call__(self, **params):
+        return self.compositor(self.f, self.g)(
+            **self.curried_params.params
+        )(**params)

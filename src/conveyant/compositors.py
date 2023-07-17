@@ -63,6 +63,17 @@ def direct_compositor(
     return transformed_f_outer
 
 
+def reversed_args_compositor(
+    f_outer: callable,
+    f_inner: callable,
+) -> callable:
+    def transformed_f_inner(**f_inner_params):
+        def transformed_f_outer(**f_outer_params):
+            return f_outer(**{**f_outer_params, **f_inner(**f_inner_params)})
+        return transformed_f_outer
+    return transformed_f_inner
+
+
 def close_imapping_compositor(
     inner_mapping: Optional[Mapping] = None,
     outer_mapping: Optional[Mapping] = None,

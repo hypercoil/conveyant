@@ -6,8 +6,10 @@ from .compositors import (
     close_omapping_compositor,
     delayed_outer_compositor,
     direct_compositor,
+    reversed_args_compositor,
 )
 from .containers import (
+    Composition,
     PipelineArgument,
     PipelineStage,
     Primitive,

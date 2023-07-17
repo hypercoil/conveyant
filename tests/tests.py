@@ -14,6 +14,7 @@ from conveyant import (
     split_chain,
     joindata,
     direct_compositor,
+    reversed_args_compositor,
     null_transform,
     # null_op,
     # null_stage,
@@ -29,6 +30,7 @@ from conveyant import (
     SanitisedFunctionWrapper as F,
     SanitisedPartialApplication as P,
     Primitive,
+    Composition,
 )
 
 
@@ -107,10 +109,13 @@ def rename_output(old_name, new_name):
     return transform
 
 
+def increment_output_p(incr, **params):
+    return {k: v + incr for k, v in params.items()}
+
+
 def increment_output(incr):
     def transform(f, compositor=direct_compositor):
-        def transformer_f(**params):
-            return {k: v + incr for k, v in params.items()}
+        transformer_f = P(increment_output_p, incr=incr)
 
         def f_transformed(**params):
             return compositor(transformer_f, f)()(**params)
@@ -250,6 +255,7 @@ def test_replicate():
     assert params_out['a'] == [1, 1, 1, 2, 2, 2, 3, 3, 3]
     assert params_out['b'] == [4, 5, 6, 4, 5, 6, 4, 5, 6]
     assert params_out['c'] == [(), (), (), (), (), (), (), (), ()]
+
     transformer = replicate(
         spec=spec,
         weave_type='maximal',
@@ -260,6 +266,27 @@ def test_replicate():
     assert params_out['a'] == [1, 1, 1, 2, 2, 2, 3, 3, 3]
     assert params_out['b'] == [4, 5, 6, 4, 5, 6, 4, 5, 6]
     assert params_out['c'] == [()]
+
+    # params = {
+    #     'a': [1, 2, 3],
+    #     'b': (4, 5, 6),
+    #     'c': (7, 8, 9),
+    #     'd': [10, 11, 12],
+    # }
+    # spec = ('a', 'b', 'c', 'd')
+    # SETTINGS.set_aggregator_types(list)
+    # transformer = replicate(
+    #     spec=spec,
+    #     weave_type='maximal',
+    #     maximum_aggregation_depth=None,
+    #     broadcast_out_of_spec=True,
+    # )
+    # params_out = transformer(**params)
+    # assert params_out['a'] == [1, 2, 3]
+    # assert params_out['b'] == [(4, 5, 6), (4, 5, 6), (4, 5, 6)]
+    # assert params_out['c'] == [(7, 8, 9), (7, 8, 9), (7, 8, 9)]
+    # assert params_out['d'] == [10, 11, 12]
+    # SETTINGS.set_aggregator_types(list, tuple)
 
     params = {
         'a': ['cat', 'dog'],
@@ -698,3 +725,21 @@ def test_primitive():
         forward_unused=True,
     )
     assert consume_p(all=0) == {}
+
+
+def test_composition():
+
+    c = Composition(
+        compositor=direct_compositor,
+        f=P(increment_output_p, incr=1),
+        g=oper,
+    ).bind()
+    assert c(name='test', w=1, x=2, y=3, z=4) == {'test': -1}
+
+    c = Composition(
+        compositor=reversed_args_compositor,
+        f=P(increment_output_p, incr=1),
+        g=oper,
+    )
+    c = c.bind(name='test', w=1, x=2, y=3, z=4)
+    assert c() == {'test': -1}
