@@ -180,7 +180,11 @@ class SanitisedPartialApplication:
         return self.__str__()
 
     def __call__(self, *pparams, **params):
-        return self.f(*self.pparams, *pparams, **self.params, **params)
+        # Note: this is sort of unsafe: we're overridding the params
+        #       that were passed in to the function. This is fine
+        #       for now, but we should probably do something more
+        #       sensible in the future.
+        return self.f(*self.pparams, *pparams, **{**self.params, **params})
 
 
 @dataclasses.dataclass
