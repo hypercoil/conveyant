@@ -6,7 +6,7 @@ Functional containers and sanitised wrappers for safe pickling
 """
 import dataclasses
 import inspect
-from typing import Callable, Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 from .compositors import reversed_args_compositor
 
@@ -17,8 +17,8 @@ from .compositors import reversed_args_compositor
 
 def CONTAINER_TYPES():
     return (
-        SanitisedPartialApplication,
-        SanitisedFunctionWrapper,
+        FunctionWrapper,
+        PartialApplication,
         Composition,
     )
 
@@ -76,12 +76,90 @@ class Primitive:
         return str(self)
 
 
-@dataclasses.dataclass
-class SanitisedFunctionWrapper:
+@dataclasses.dataclass(frozen=True)
+class CallableContainer:
+    """
+    Container for sanitising and manipulating callables.
+
+    This is a frozen dataclass that is used to wrap callables in a way that
+    allows for safe pickling. It also allows for the manipulation of the
+    wrapped callable's arguments, delayed binding of arguments,
+    conditionalisation of arguments, partial application, and composition of
+    callables.
+
+    This class (and those that inherit from it) should be used only with
+    great care. Depending on how they are constructed and composed, they
+    might lose some expected functionality. For example, nesting containers
+    without appropriately copying the ``__allowed__`` and ``__conditions__``
+    attributes will result in the loss of those attributes. Similarly,
+    composing containers without appropriately copying the ``__allowed__``
+    and ``__conditions__`` attributes will result in the loss of those
+    attributes.
+
+    Parameters
+    ----------
+    f : Callable
+        The callable to be wrapped.
+    __allowed__ : tuple or None (default: None)
+        A sequence of strings representing the names of the arguments that
+        are allowed to be passed to the wrapped function under delayed
+        binding. If None, all arguments are allowed. To explicitly allow no
+        arguments, pass an empty tuple.
+    __conditions__ : mapping
+        A mapping from tuples of the form (argument name, argument value) to
+        sequences of tuples of the form (argument name, argument value). If an
+        argument is passed to the wrapped function and its name and value are
+        in the keys of this mapping, then all argument in the value of the
+        mapping will also be passed to the wrapped function.
+    __priority__ : str (default: ``'eci'``)
+        A string representing the priority of the arguments passed to the
+        wrapped function. The string should be a permutation of the letters
+        ``'e'``, ``'c'``, and ``'i'``, where ``'e'`` represents environment,
+        ``'c'`` represents condition, and ``'i'`` represents internal. The
+        priority string determines how argument values are assigned in the
+        event of a name collision. For example, if the priority string is
+        ``'eci'``, then environment arguments will have maximum priority,
+        followed by condition arguments, followed by internal arguments.
+        * ``'e'`` : environment / explicit arguments. These are arguments
+            explicitly passed from the environment or from the user.
+        * ``'c'`` : condition arguments. These are arguments that are
+            conditionally passed to the wrapped function based on the
+            values of other arguments according to the ruleset defined in
+            ``__conditions__``.
+        * ``'i'`` : internal arguments. These are arguments that are passed to
+            the wrapped function by the wrapper, if it is a partial
+            application or a composition.
+    """
+
     f: Callable
+    pparams: Sequence = dataclasses.field(default_factory=tuple)
+    params: Mapping[str, Any] = dataclasses.field(default_factory=dict)
     __allowed__: Optional[Sequence[str]] = dataclasses.field(
         default_factory=tuple
     )
+    __conditions__: Mapping[
+        Tuple[str, Any], Tuple[str, Any]
+    ] = dataclasses.field(default_factory=dict)
+    __priority__: str = 'eci'  # environment, condition, internal
+
+    def __init__(
+        self,
+        f: Callable,
+        *pparams: Sequence,
+        __allowed__: Optional[Sequence[str]] = (),
+        __conditions__: Mapping[
+            Tuple[str, Any],
+            Sequence[Tuple[str, Any]],
+        ] = {},
+        __priority__: str = 'eci',
+        **params: Mapping,
+    ):
+        object.__setattr__(self, 'f', f)
+        object.__setattr__(self, 'pparams', pparams)
+        object.__setattr__(self, 'params', params)
+        object.__setattr__(self, '__allowed__', __allowed__)
+        object.__setattr__(self, '__conditions__', __conditions__)
+        object.__setattr__(self, '__priority__', __priority__)
 
     def bind(self, *pparams: Sequence, **params: Mapping):
         if self.__allowed__ is not None:
@@ -91,18 +169,66 @@ class SanitisedFunctionWrapper:
             }
         if len(params) == 0:
             return self
-        return SanitisedPartialApplication(
+        i_params = self.params
+        e_params = params
+        if self.get_priority('i') < self.get_priority('e'):
+            params = {**e_params, **i_params}
+        else:
+            params = {**i_params, **e_params}
+        return PartialApplication(
             self.f,
+            *self.pparams,
             *pparams,
             **params,
             __allowed__=self.__allowed__,
+            __conditions__=self.__conditions__,
+            __priority__=self.__priority__,
         )
 
-    def add_allowed(self, __allowed__):
-        return SanitisedFunctionWrapper(
+    def add_allowed(
+        self,
+        __allowed__: Sequence[str],
+    ) -> 'CallableContainer':
+        return self.__class__(
             self.f,
-            __allowed__=tuple(set(__allowed__ + self.__allowed__)),
+            *self.pparams,
+            **self.params,
+            __allowed__=tuple(set(__allowed__).union(self.__allowed__)),
+            __conditions__=self.__conditions__,
+            __priority__=self.__priority__,
         )
+
+    def add_conditions(
+        self,
+        __conditions__: Mapping[
+            Tuple[str, Any],
+            Sequence[Tuple[str, Any]],
+        ],
+    ) -> 'CallableContainer':
+        return self.__class__(
+            self.f,
+            *self.pparams,
+            **self.params,
+            __allowed__=self.__allowed__,
+            __conditions__={**self.__conditions__, **__conditions__},
+            __priority__=self.__priority__,
+        )
+
+    def set_priority(
+        self,
+        __priority__: str,
+    ) -> 'CallableContainer':
+        return self.__class__(
+            self.f,
+            *self.pparams,
+            **self.params,
+            __allowed__=self.__allowed__,
+            __conditions__=self.__conditions__,
+            __priority__=__priority__,
+        )
+
+    def get_priority(self, query: str) -> int:
+        return self.__priority__.index(query)
 
     def __str__(self):
         if isinstance(self.f, Primitive):
@@ -116,50 +242,54 @@ class SanitisedFunctionWrapper:
         return self.__str__()
 
     def __call__(self, *pparams, **params):
-        return self.f(*pparams, **params)
+        e_params = params
+        c_params = {}
+        i_params = self.params
+        if self.__conditions__:
+            if self.get_priority('i') < self.get_priority('e'):
+                params = {**e_params, **i_params}
+            else:
+                params = {**i_params, **e_params}
+            for k, v in params.items():
+                if (k, v) in self.__conditions__:
+                    for new_k, new_v in self.__conditions__[(k, v)]:
+                        c_params[new_k] = new_v
+        params_metadict = {
+            'e': e_params,
+            'c': c_params,
+            'i': i_params,
+        }
+        ordered = sorted(['e', 'c', 'i'], reverse=True, key=self.get_priority)
+        all_params = {}
+        for param_key in ordered:
+            param_group = params_metadict[param_key]
+            all_params = {**all_params, **param_group}
+        return self.f(*self.pparams, *pparams, **all_params)
 
     def __eq__(self, other):
         return self.f == other
 
 
-class SanitisedPartialApplication:
+class FunctionWrapper(CallableContainer):
     def __init__(
         self,
         f: Callable,
-        *pparams: Sequence,
         __allowed__: Optional[Sequence[str]] = (),
-        **params: Mapping,
+        __conditions__: Mapping[
+            Tuple[str, Any],
+            Sequence[Tuple[str, Any]],
+        ] = {},
+        __priority__: str = 'eci',
     ):
-        self.f = f
-        self.pparams = pparams
-        self.params = params
-        self.__allowed__ = __allowed__
-
-    def bind(self, *pparams: Sequence, **params: Mapping):
-        if self.__allowed__ is not None:
-            params = {
-                k: v for k, v in params.items()
-                if k in self.__allowed__
-            }
-        if len(params) == 0:
-            return self
-        return SanitisedPartialApplication(
-            self.f,
-            *self.pparams,
-            *pparams,
-            **self.params,
-            **params,
-            __allowed__=self.__allowed__,
+        return super().__init__(
+            f,
+            __allowed__=__allowed__,
+            __conditions__=__conditions__,
+            __priority__=__priority__,
         )
 
-    def add_allowed(self, __allowed__):
-        return SanitisedPartialApplication(
-            self.f,
-            *self.pparams,
-            **self.params,
-            __allowed__=tuple(set(__allowed__ + self.__allowed__)),
-        )
 
+class PartialApplication(CallableContainer):
     def __str__(self):
         pparams = ', '.join([str(p) for p in self.pparams])
         params = ', '.join([f'{k}={v}' for k, v in self.params.items()])
@@ -179,13 +309,6 @@ class SanitisedPartialApplication:
     def __repr__(self):
         return self.__str__()
 
-    def __call__(self, *pparams, **params):
-        # Note: this is sort of unsafe: we're overridding the params
-        #       that were passed in to the function. This is fine
-        #       for now, but we should probably do something more
-        #       sensible in the future.
-        return self.f(*self.pparams, *pparams, **{**self.params, **params})
-
 
 @dataclasses.dataclass
 class PipelineArgument:
@@ -203,7 +326,7 @@ class PipelineStage:
     split: bool = False
 
     def __post_init__(self):
-        self.f = SanitisedFunctionWrapper(self.f)
+        self.f = FunctionWrapper(self.f)
 
     def __call__(self, *pparams, **params):
         return self.f(*self.args.pparams, **self.args.params)(
@@ -211,7 +334,10 @@ class PipelineStage:
         )
 
 
-@dataclasses.dataclass
+# TODO: If in practice we're not using this, then we should remove it.
+#       Otherwise, we should make it more robust. Currently, the priority
+#       string does nothing.
+@dataclasses.dataclass(frozen=True)
 class Composition:
     compositor: callable
     outer: callable
@@ -224,34 +350,71 @@ class Composition:
     __allowed__: Optional[Sequence[str]] = dataclasses.field(
         default_factory=tuple
     )
+    __conditions__: Mapping[
+        Tuple[str, Any], Sequence[Tuple[str, Any]]
+    ] = dataclasses.field(default_factory=dict)
+    __priority__: str = 'eci'
 
     def __post_init__(self):
         if self.compositor == reversed_args_compositor:
-            self.curried_fn = 'inner'
-        __allowed_inner__ = (
-            self.__allowed__ if self.curried_fn == 'outer' else ()
-        )
-        __allowed_outer__ = (
-            self.__allowed__ if self.curried_fn == 'inner' else ()
-        )
-        if not isinstance(self.compositor, CONTAINER_TYPES()):
-            self.compositor = SanitisedFunctionWrapper(self.compositor)
-        if not isinstance(self.outer, CONTAINER_TYPES()):
-            self.outer = SanitisedFunctionWrapper(
-                self.outer, __allowed__=__allowed_outer__
-            )
-        else:
-            self.outer = self.outer.add_allowed(__allowed_outer__)
-        if not isinstance(self.inner, CONTAINER_TYPES()):
-            self.inner = SanitisedFunctionWrapper(
-                self.inner, __allowed__=__allowed_inner__
-            )
-        else:
-            self.inner = self.inner.add_allowed(__allowed_inner__)
+            object.__setattr__(self, 'curried_fn', 'inner')
         if self.curried_fn == 'inner':
-            self.__allowed__ = self.outer.__allowed__
+            __allowed_outer__ = self.__allowed__
+            __conditions_outer__ = self.__conditions__
+            __allowed_inner__ = ()
+            __conditions_inner__ = {}
         elif self.curried_fn == 'outer':
-            self.__allowed__ = self.inner.__allowed__
+            __allowed_outer__ = ()
+            __conditions_outer__ = {}
+            __allowed_inner__ = self.__allowed__
+            __conditions_inner__ = self.__conditions__
+
+        if not isinstance(self.compositor, CONTAINER_TYPES()):
+            object.__setattr__(
+                self, 'compositor', FunctionWrapper(self.compositor)
+            )
+        if not isinstance(self.outer, CONTAINER_TYPES()):
+            object.__setattr__(
+                self,
+                'outer',
+                FunctionWrapper(
+                    self.outer,
+                    __allowed__=__allowed_outer__,
+                    __conditions__=__conditions_outer__,
+                    __priority__=self.__priority__,
+                )
+            )
+        else:
+            object.__setattr__(self, 'outer', self.outer.add_allowed(
+                __allowed_outer__
+            ))
+            object.__setattr__(self, 'outer', self.outer.add_conditions(
+                __conditions_outer__
+            ))
+
+        if not isinstance(self.inner, CONTAINER_TYPES()):
+            object.__setattr__(
+                self,
+                'inner',
+                FunctionWrapper(
+                    self.inner,
+                    __allowed__=__allowed_inner__,
+                    __conditions__=__conditions_inner__,
+                    __priority__=self.__priority__,
+                )
+            )
+        else:
+            object.__setattr__(self, 'inner', self.inner.add_allowed(
+                __allowed_inner__
+            ))
+            object.__setattr__(self, 'inner', self.inner.add_conditions(
+                __conditions_inner__
+            ))
+
+        if self.curried_fn == 'inner':
+            object.__setattr__(self, '__allowed__', self.outer.__allowed__)
+        elif self.curried_fn == 'outer':
+            object.__setattr__(self, '__allowed__', self.inner.__allowed__)
 
     def bind_curried(self, **params):
         return Composition(
@@ -274,18 +437,22 @@ class Composition:
             try:
                 outer = self.outer.bind(**params)
             except AttributeError:
-                outer = SanitisedPartialApplication(
+                outer = PartialApplication(
                     self.outer,
                     __allowed__=self.__allowed__,
+                    __conditions__=self.__conditions__,
+                    __priority__=self.__priority__,
                     **params,
                 )
         elif self.curried_fn == 'outer':
             try:
                 inner = self.inner.bind(**params)
             except AttributeError:
-                inner = SanitisedPartialApplication(
+                inner = PartialApplication(
                     self.inner,
                     __allowed__=self.__allowed__,
+                    __conditions__=self.__conditions__,
+                    __priority__=self.__priority__,
                     **params,
                 )
             outer = self.outer
@@ -295,15 +462,47 @@ class Composition:
             inner,
             curried_params=self.curried_params,
             __allowed__=self.__allowed__,
+            __conditions__=self.__conditions__,
+            __priority__=self.__priority__,
         )
 
     def add_allowed(self, __allowed__):
-        return Composition(
+        return self.__class__(
             self.compositor,
             self.outer,
             self.inner,
             curried_params=self.curried_params,
             __allowed__=tuple(set(__allowed__ + self.__allowed__)),
+            __conditions__=self.__conditions__,
+            __priority__=self.__priority__,
+        )
+
+    def add_conditions(
+        self,
+        __conditions__: Mapping[Tuple[str, Any], Tuple[str, Any]],
+    ) -> 'CallableContainer':
+        return self.__class__(
+            self.compositor,
+            self.outer,
+            self.inner,
+            curried_params=self.curried_params,
+            __allowed__=self.__allowed__,
+            __conditions__={**self.__conditions__, **__conditions__},
+            __priority__=self.__priority__,
+        )
+
+    def set_priority(
+        self,
+        __priority__: str,
+    ) -> 'CallableContainer':
+        return self.__class__(
+            self.compositor,
+            self.outer,
+            self.inner,
+            curried_params=self.curried_params,
+            __allowed__=self.__allowed__,
+            __conditions__=self.__conditions__,
+            __priority__=__priority__,
         )
 
     def __call__(self, **params):

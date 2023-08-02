@@ -10,11 +10,11 @@ from .compositors import (
 )
 from .containers import (
     Composition,
+    FunctionWrapper,
+    PartialApplication,
     PipelineArgument,
     PipelineStage,
     Primitive,
-    SanitisedFunctionWrapper,
-    SanitisedPartialApplication,
 )
 from .flows import (
     ichain,
