@@ -27,8 +27,8 @@ from conveyant import (
     inject_params,
     PipelineArgument as A,
     PipelineStage as S,
-    SanitisedFunctionWrapper as F,
-    SanitisedPartialApplication as P,
+    FunctionWrapper as F,
+    PartialApplication as P,
     Primitive,
     Composition,
 )
@@ -626,11 +626,26 @@ def test_sanitisers():
     assert repr(ptl) == "oper(test, w=1, x=2, y=3, z=4)"
     assert ptl() == oper(name='test', w=1, x=2, y=3, z=4)
 
+    ptl = P(oper, 'test', w=1, x=2, __allowed__=('y', 'z'))
+    ptl = ptl.set_priority('ice')
+    ptl = ptl.bind(y=3, z=4)
+    assert repr(ptl) == "oper(test, y=3, z=4, w=1, x=2)"
+    assert ptl() == oper(name='test', w=1, x=2, y=3, z=4)
+
     ptl = P(oper, name='test', w=1, x=2)
     assert repr(ptl) == "oper(name=test, w=1, x=2)"
     ptl = P(oper, 'test', 1, 2)
     assert repr(ptl) == "oper(test, 1, 2)"
     assert ptl(y=3, z=4) == oper(name='test', w=1, x=2, y=3, z=4)
+
+    ptl = P(oper, name='test', w=1, x=2, __conditions__={
+        ('w', 1): [('y', 3), ('x', 5)],
+        ('x', 2): [('z', 4)],
+    })
+    assert repr(ptl) == "oper(name=test, w=1, x=2)"
+    assert ptl() == oper(name='test', w=1, x=5, y=3, z=4)
+    ptl = ptl.set_priority('eic')
+    assert ptl() == oper(name='test', w=1, x=2, y=3, z=4)
 
     w, x, y, z = 1, 2, 3, 4
     i_chain = ichain(
@@ -715,8 +730,6 @@ def test_primitive():
         oper('test', 1, 2, 3, 4)
     )
 
-    def null2(x, y):
-        return x, y
     null2_p = Primitive(
         null2,
         name='null2',
@@ -766,8 +779,7 @@ def test_composition():
     # TODO: Oh, no -- we cannot use ``f`` as a variable name! This is because
     #       ``f`` is a reserved name in several container classes. We need to
     #       fix this by using reserved names that are less likely to be used
-    #       as variable names. For instance, underscore-prefixed names are
-    #       much less likely to be used as variable names.
+    #       as variable names -- like underscore-prefixed names
     def div_args(e, g):
         return {'h': e / g}
 
@@ -806,6 +818,7 @@ def test_composition():
         inner=c0,
         __allowed__=('g',),
     ).bind_curried(a=2)
+    c1.set_priority('ice')
     assert c1.curried_fn == 'inner'
     assert c1(g=2)['h'] == 1.5
     assert c1.bind(g=2)()['h'] == 1.5
