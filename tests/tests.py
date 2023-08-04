@@ -4,7 +4,7 @@
 """
 Unit tests
 """
-import pytest
+import inspect, pytest
 
 
 from conveyant import (
@@ -13,6 +13,7 @@ from conveyant import (
     iochain,
     split_chain,
     joindata,
+    emulate_assignment,
     direct_compositor,
     reversed_args_compositor,
     null_transform,
@@ -822,3 +823,27 @@ def test_composition():
     assert c1.curried_fn == 'inner'
     assert c1(g=2)['h'] == 1.5
     assert c1.bind(g=2)()['h'] == 1.5
+
+
+def test_emulation():
+    def indef_oper(**params):
+        return oper(**params)
+
+    indef_oper.__signature__ = inspect.signature(oper)
+    indef_oper_w = emulate_assignment(strict=True)(indef_oper)
+    assert (
+        indef_oper_w(name='test', w=1, x=2, y=3, z=4) ==
+        oper('test', 1, 2, 3, 4)
+    )
+
+    with pytest.raises(TypeError):
+        indef_oper_w(name='test', v=0, w=1, x=2, y=3, z=4)
+
+    def oper_with_defaults(name, w=1, x=2, y=3, z=4):
+        return oper(name, w, x, y, z)
+
+    indef_oper.__signature__ = inspect.signature(oper_with_defaults)
+    indef_oper_w = emulate_assignment(strict=True)(indef_oper)
+    assert (
+        indef_oper_w(name='test', y=3) == oper('test', 1, 2, 3, 4)
+    )

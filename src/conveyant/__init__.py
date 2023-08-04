@@ -16,6 +16,9 @@ from .containers import (
     PipelineStage,
     Primitive,
 )
+from .emulate import (
+    emulate_assignment,
+)
 from .flows import (
     ichain,
     imap,
