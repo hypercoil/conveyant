@@ -1,5 +1,5 @@
 # ``conveyant``
-A minimal system for compositional functional programming abstractions
+An ultra-lightweight system for compositional quasi-functional programming abstractions
 
 We use this system to separate abstract or complicated core routines from specific, concrete implementations that operate with particular dataset or input / output types. For example, instead of separately handling different imaging data types and output types (e.g., screenshots and interactive HTML) in our plotting function, the preprocessors for each data type and postprocessors for each artefact type are lifted out from a plotting function that operates directly on tensor types. Different compositional chains can then transform the general and minimal core plotting routine into a pipeline that reads a desired file type and outputs each desired artefact.
 

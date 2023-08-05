@@ -382,15 +382,15 @@ class Composition:
                     __allowed__=__allowed_outer__,
                     __conditions__=__conditions_outer__,
                     __priority__=self.__priority__,
-                )
+                ),
             )
         else:
-            object.__setattr__(self, 'outer', self.outer.add_allowed(
-                __allowed_outer__
-            ))
-            object.__setattr__(self, 'outer', self.outer.add_conditions(
-                __conditions_outer__
-            ))
+            object.__setattr__(
+                self, 'outer', self.outer.add_allowed(__allowed_outer__)
+            )
+            object.__setattr__(
+                self, 'outer', self.outer.add_conditions(__conditions_outer__)
+            )
 
         if not isinstance(self.inner, CONTAINER_TYPES()):
             object.__setattr__(
@@ -404,12 +404,12 @@ class Composition:
                 )
             )
         else:
-            object.__setattr__(self, 'inner', self.inner.add_allowed(
-                __allowed_inner__
-            ))
-            object.__setattr__(self, 'inner', self.inner.add_conditions(
-                __conditions_inner__
-            ))
+            object.__setattr__(
+                self, 'inner', self.inner.add_allowed(__allowed_inner__)
+            )
+            object.__setattr__(
+                self, 'inner', self.inner.add_conditions(__conditions_inner__)
+            )
 
         if self.curried_fn == 'inner':
             object.__setattr__(self, '__allowed__', self.outer.__allowed__)

@@ -7,7 +7,7 @@ Functional control flows
 Simple functional transformations for configuring control flows of functions.
 """
 from itertools import chain
-from typing import Any, Literal, Mapping, Optional, Sequence
+from typing import Literal, Mapping, Optional, Sequence
 
 from .compositors import (
     _seq_to_dict,
@@ -243,17 +243,3 @@ def join(
             return join_fs
         return transform
     return split_chain
-
-
-def joindata(
-    join_vars: Optional[Sequence[str]] = None,
-    how: Literal['outer', 'inner'] = 'outer',
-    fill_value: Any = None,
-) -> callable:
-    def joining_f(arg):
-        out = arg[0].join(arg[1:], how=how)
-        if fill_value is not None:
-            out = out.fillna(fill_value)
-        return out
-
-    return join(joining_f, join_vars)

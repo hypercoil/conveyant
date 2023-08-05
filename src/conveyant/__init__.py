@@ -26,7 +26,6 @@ from .flows import (
     inject_params,
     iochain,
     join,
-    joindata,
     null_transform,
     ochain,
     omap,

@@ -12,7 +12,6 @@ from conveyant import (
     ochain,
     iochain,
     split_chain,
-    joindata,
     emulate_assignment,
     direct_compositor,
     reversed_args_compositor,
