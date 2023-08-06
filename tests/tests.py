@@ -13,6 +13,7 @@ from conveyant import (
     iochain,
     split_chain,
     emulate_assignment,
+    splice_on,
     direct_compositor,
     reversed_args_compositor,
     null_transform,
@@ -845,4 +846,32 @@ def test_emulation():
     indef_oper_w = emulate_assignment(strict=True)(indef_oper)
     assert (
         indef_oper_w(name='test', y=3) == oper('test', 1, 2, 3, 4)
+    )
+
+    @splice_on(oper, occlusion=('w', 'x'))
+    def set_w_and_x(name, val=1, **params):
+        w = x = val
+        return oper(name, w, x, **params)
+
+    assert set_w_and_x(name='test', y=2, z=3) == oper('test', 1, 1, 2, 3)
+    assert (
+        set(p for p in set_w_and_x.__signature__.parameters) ==
+        {'name', 'val', 'y', 'z'}
+    )
+
+    with pytest.raises(TypeError):
+        set_w_and_x(name='dog')
+
+    def indef_oper(**params):
+        return oper(**params)
+
+    @splice_on(indef_oper, occlusion=('w', 'x'), allow_variadic=True)
+    def set_w_and_x(name, val=1, **params):
+        w = x = val
+        return indef_oper(name=name, w=w, x=x, **params)
+
+    assert set_w_and_x(name='test', y=2, z=3) == oper('test', 1, 1, 2, 3)
+    assert (
+        set(p for p in set_w_and_x.__signature__.parameters) ==
+        {'name', 'val', 'params'}
     )
