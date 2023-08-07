@@ -9,6 +9,7 @@ import inspect
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 from .compositors import reversed_args_compositor
+from .emulate import splice_on
 
 # TODO: The system for __allowed__ arguments is incredibly brittle and
 #       fails to appropriately mirror/propagate across nested containers. This
@@ -38,6 +39,13 @@ class Primitive:
     name: str
     output: Sequence[str]
     forward_unused: bool = False
+
+    def __post_init__(self):
+        object.__setattr__(
+            self, '__call__',
+            splice_on(self.f, allow_variadic=True)(self.__call__),
+        )
+        object.__setattr__(self, '__signature__', self.__call__.__signature__)
 
     def __call__(self, **params):
         extra_params = {
@@ -160,6 +168,10 @@ class CallableContainer:
         object.__setattr__(self, '__allowed__', __allowed__)
         object.__setattr__(self, '__conditions__', __conditions__)
         object.__setattr__(self, '__priority__', __priority__)
+
+    def __post_init__(self):
+        object.__setattr__(self, '__call__', splice_on(self.f)(self.__call__))
+        object.__setattr__(self, '__signature__', self.__call__.__signature__)
 
     def bind(self, *pparams: Sequence, **params: Mapping):
         if self.__allowed__ is not None:

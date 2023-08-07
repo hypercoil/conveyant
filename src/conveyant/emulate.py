@@ -8,7 +8,7 @@ Emulate assignment of keyword arguments to function parameters.
 """
 import inspect
 from functools import WRAPPER_ASSIGNMENTS, wraps
-from typing import Sequence
+from typing import Any, Mapping, Optional, Sequence, Tuple, Type
 
 
 def emulate_assignment(
@@ -43,6 +43,7 @@ def emulate_assignment(
 def splice_on(
     g: callable,
     occlusion: Sequence[str] = (),
+    expansion: Optional[Mapping[str, Tuple[Type, Any]]] = None,
     allow_variadic: bool = False,
     strict_emulation: bool = True,
 ) -> callable:
@@ -62,6 +63,18 @@ def splice_on(
             p for p in f_params.values()
             if p.kind != p.VAR_KEYWORD
         ]
+        if expansion is not None:
+            for k, (t, v) in expansion.items():
+                h_params.append(
+                    inspect.Parameter(
+                        name=k,
+                        kind=inspect.Parameter.KEYWORD_ONLY,
+                        default=inspect.Parameter.empty
+                        if v is inspect.Parameter.empty
+                        else v,
+                        annotation=t,
+                    )
+                )
         h_params.extend(
             p for p in g_params.values()
             if p.name not in occlusion
