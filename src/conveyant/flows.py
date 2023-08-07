@@ -211,9 +211,12 @@ def omap(
     )
 
 
+# TODO: Consider whether adding postprocessing to other flow control
+#       functions would be useful.
 def join(
     joining_f: callable,
     join_vars: Optional[Sequence[str]] = None,
+    postprocess: Optional[callable] = None,
 ) -> callable:
     def split_chain(*chains: Sequence[callable]) -> callable:
         def transform(
@@ -239,6 +242,9 @@ def join(
                         continue
                     out[k] = joining_f(v)
                 return f_outer(**{**f_outer_params, **out})
+
+            if postprocess is not None:
+                join_fs = postprocess(join_fs, fs)
 
             return join_fs
         return transform
