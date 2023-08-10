@@ -45,6 +45,7 @@ def splice_on(
     occlusion: Sequence[str] = (),
     expansion: Optional[Mapping[str, Tuple[Type, Any]]] = None,
     allow_variadic: bool = False,
+    kwonly_only: bool = False,
     strict_emulation: bool = True,
 ) -> callable:
     """
@@ -62,6 +63,7 @@ def splice_on(
         h_params = [
             p for p in f_params.values()
             if p.kind != p.VAR_KEYWORD
+            and (not kwonly_only or p.kind == p.KEYWORD_ONLY)
         ]
         if expansion is not None:
             for k, (t, v) in expansion.items():
@@ -79,6 +81,7 @@ def splice_on(
             p for p in g_params.values()
             if p.name not in occlusion
             and p.kind != p.VAR_KEYWORD
+            and (not kwonly_only or p.kind == p.KEYWORD_ONLY)
         )
         h_params = [p.replace(kind=p.KEYWORD_ONLY) for p in h_params]
         if allow_variadic:
