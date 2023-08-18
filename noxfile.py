@@ -13,11 +13,7 @@ def clean(session):
 
 @nox.session(python=["3.10", "3.11"])
 def tests(session):
-    session.install('.')
-    session.install('coverage[toml]')
-    session.install('pytest')
-    session.install('pytest-cov')
-    session.install('ruff')
+    session.install('.[dev]')
     session.run(
         'pytest',
         '--cov', 'conveyant',
