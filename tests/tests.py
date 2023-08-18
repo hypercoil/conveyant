@@ -736,6 +736,7 @@ def test_primitive():
         name='null2',
         output=None,
         forward_unused=True,
+        splice_on_call=True,
     )
     with pytest.raises(TypeError):
         null2_p(x=1, y=2)
@@ -745,6 +746,7 @@ def test_primitive():
         name='consume_all',
         output=(),
         forward_unused=True,
+        splice_on_call=False,
     )
     assert consume_p(all=0) == {}
 

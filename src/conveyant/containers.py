@@ -39,13 +39,23 @@ class Primitive:
     name: str
     output: Sequence[str]
     forward_unused: bool = False
+    splice_on_call: bool = True
 
     def __post_init__(self):
-        object.__setattr__(
-            self, '__call__',
-            splice_on(self.f, allow_variadic=True)(self.__call__),
-        )
-        object.__setattr__(self, '__signature__', self.__call__.__signature__)
+        if self.splice_on_call:
+            object.__setattr__(
+                self, '__call__',
+                splice_on(self.f, allow_variadic=True)(self.__call__),
+            )
+            object.__setattr__(
+                self, '__signature__', self.__call__.__signature__
+            )
+        else:
+            @splice_on(self.f, allow_variadic=True)
+            def _wrapped(**params):
+                return self.f(**params)
+            object.__setattr__(self, '__signature__', _wrapped.__signature__)
+            del _wrapped
 
     def __call__(self, **params):
         extra_params = {
