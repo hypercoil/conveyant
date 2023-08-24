@@ -6,6 +6,7 @@ Functional containers and sanitised wrappers for safe pickling
 """
 import dataclasses
 import inspect
+from functools import partial
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 from .compositors import reversed_args_compositor
@@ -179,9 +180,10 @@ class CallableContainer:
         object.__setattr__(self, '__conditions__', __conditions__)
         object.__setattr__(self, '__priority__', __priority__)
 
-    def __post_init__(self):
-        object.__setattr__(self, '__call__', splice_on(self.f)(self.__call__))
-        object.__setattr__(self, '__signature__', self.__call__.__signature__)
+        signature = inspect.signature(
+            partial(self.f, *self.pparams, **self.params)
+        )
+        object.__setattr__(self, '__signature__', signature)
 
     def bind(self, *pparams: Sequence, **params: Mapping):
         if self.__allowed__ is not None:
@@ -312,6 +314,34 @@ class FunctionWrapper(CallableContainer):
 
 
 class PartialApplication(CallableContainer):
+    def __init__(
+        self,
+        f: Callable,
+        *pparams: Sequence,
+        __allowed__: Optional[Sequence[str]] = (),
+        __conditions__: Mapping[
+            Tuple[str, Any],
+            Sequence[Tuple[str, Any]],
+        ] = {},
+        __priority__: str = 'eci',
+        **params: Mapping,
+    ):
+        if isinstance(f, PartialApplication):
+            pparams = f.pparams + pparams
+            params = {**f.params, **params}
+            __allowed__ = tuple(set(f.__allowed__ + __allowed__))
+            __conditions__ = {**f.__conditions__, **__conditions__}
+            __priority__ = f.__priority__
+            f = f.f
+        super().__init__(
+            f,
+            *pparams,
+            __allowed__=__allowed__,
+            __conditions__=__conditions__,
+            __priority__=__priority__,
+            **params,
+        )
+
     def __str__(self):
         pparams = ', '.join([str(p) for p in self.pparams])
         params = ', '.join([f'{k}={v}' for k, v in self.params.items()])

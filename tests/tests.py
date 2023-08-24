@@ -684,10 +684,10 @@ def test_primitive():
         forward_unused=True,
     )
     fn = F(oper_p)
-    ptl = P(oper_p, 'test', w=1, x=2)
+    ptl = P(oper_p, name='test', w=1, x=2)
     assert repr(oper_p) == "Primitive(oper)"
     assert repr(fn) == "Primitive(oper)"
-    assert repr(ptl) == "Primitive(oper)(test, w=1, x=2)"
+    assert repr(ptl) == "Primitive(oper)(name=test, w=1, x=2)"
     assert (
         oper_p(name='test', w=1, x=2, y=3, z=4) ==
         {'output': oper('test', 1, 2, 3, 4)}
