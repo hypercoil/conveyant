@@ -14,6 +14,7 @@ from conveyant import (
     split_chain,
     emulate_assignment,
     splice_on,
+    splice_docstring,
     direct_compositor,
     reversed_args_compositor,
     null_transform,
@@ -876,4 +877,42 @@ def test_emulation():
     assert (
         set(p for p in set_w_and_x.__signature__.parameters) ==
         {'name', 'val', 'params'}
+    )
+
+
+def test_docstring_splice():
+    def f(a: float, b: float = 1): return a + b
+    template = {
+        'a': {'desc': 'the first number'},
+        'b': {'desc': 'the second number'},
+    }
+    base_str = 'Add the two numbers'
+    returns = (
+        'c : float\n'
+        '    the sum'
+    )
+    g = splice_docstring(f, template, base_str, returns)
+    assert g.__doc__ == (
+        'Add the two numbers\n\n'
+        'Parameters\n'
+        '----------\n'
+        'a : float \n'
+        '    the first number\n'
+        'b : float (default: ``1``)\n'
+        '    the second number\n\n'
+        'Returns\n'
+        '-------\n'
+        'c : float\n'
+        '    the sum\n'
+    )
+
+    h = splice_docstring(f, {})
+    assert h.__doc__ == (
+        '<No description>\n\n'
+        'Parameters\n'
+        '----------\n'
+        'a : float \n'
+        '    <No description>\n'
+        'b : float (default: ``1``)\n'
+        '    <No description>\n'
     )

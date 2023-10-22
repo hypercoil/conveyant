@@ -8,6 +8,7 @@ Emulate assignment of keyword arguments to function parameters.
 """
 import inspect
 from functools import WRAPPER_ASSIGNMENTS, wraps
+from textwrap import indent
 from typing import Any, Mapping, Optional, Sequence, Tuple, Type
 
 
@@ -108,3 +109,53 @@ def splice_on(
             allow_variadic=allow_variadic,
         )(h)
     return _splice_on
+
+
+def splice_docstring(
+    f: callable,
+    template: Mapping[str, Mapping[str, str]],
+    base_str: Optional[str] = None,
+    returns: Optional[str] = None,
+    indentation: Optional[str] = None,
+    missingdoc: Optional[str] = None,
+) -> callable:
+    """
+    Splice the docstring of `f` with `template`, using the function's
+    signature to infer parameters.
+    """
+    @wraps(f)
+    def g(*args, **kwargs):
+        return f(*args, **kwargs)
+    parameters = inspect.signature(f).parameters
+    if missingdoc is None:
+        missingdoc = '<No description>'
+    doc_template = base_str or f.__doc__ or missingdoc
+    if indentation is None:
+        indentation = '    '
+    doc_template += '\n\nParameters\n----------\n'
+    doc_vars = {}
+    for k in parameters:
+        v = template.get(k, {})
+        doc_vars[f'{k}_type'] = v.get(
+            'type', parameters[k].annotation.__name__
+        )
+        doc_vars[f'{k}_desc'] = indent(
+            v.get('desc', missingdoc), # parameters[k].annotation.__doc__),
+            indentation,
+        )
+        default = v.get('default', parameters[k].default)
+        if default is inspect.Parameter.empty:
+            doc_vars[f'{k}_default'] = ''
+        else:
+            doc_vars[f'{k}_default'] = f'(default: ``{default}``)'
+        doc_template += (
+            f'{k} : {{{k}_type}} {{{k}_default}}\n'
+            f'{{{k}_desc}}\n'
+        )
+
+    if returns is not None:
+        doc_template += '\nReturns\n-------\n'
+        doc_template += f'{returns}\n'
+
+    g.__doc__ = doc_template.format(**doc_vars)
+    return g

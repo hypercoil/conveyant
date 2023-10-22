@@ -18,6 +18,7 @@ from .containers import (
 )
 from .emulate import (
     emulate_assignment,
+    splice_docstring,
     splice_on,
 )
 from .flows import (
