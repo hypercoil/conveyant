@@ -7,9 +7,35 @@ Assignment emulator
 Emulate assignment of keyword arguments to function parameters.
 """
 import inspect
-from functools import WRAPPER_ASSIGNMENTS, wraps
+from functools import WRAPPER_ASSIGNMENTS, WRAPPER_UPDATES
+from functools import wraps as wraps_orig
 from textwrap import indent
 from typing import Any, Mapping, Optional, Sequence, Tuple, Type
+
+
+def wraps(
+    wrapped: callable,
+    assigned: Optional[Sequence[str]] = None,
+    updated: Optional[Sequence[str]] = None,
+) -> callable:
+    """
+    A version of functools.wraps that preserves the metadata and signature of
+    the wrapped function.
+    """
+    if assigned is None:
+        assigned = WRAPPER_ASSIGNMENTS
+    if updated is None:
+        updated = WRAPPER_UPDATES
+    wrapper = wraps_orig(
+        wrapped,
+        assigned=assigned,
+        updated=updated,
+    )
+    if hasattr(wrapped, '__signature__'):
+        wrapper.__signature__ = inspect.signature(wrapped)
+    if hasattr(wrapped, '__meta__'):
+        wrapper.__meta__ = wrapped.__meta__
+    return wrapper
 
 
 def emulate_assignment(
