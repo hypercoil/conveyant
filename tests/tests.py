@@ -868,7 +868,12 @@ def test_emulation():
     def indef_oper(**params):
         return oper(**params)
 
-    @splice_on(indef_oper, occlusion=('w', 'x'), allow_variadic=True)
+    subs = {
+        'w': ('x', {'injected': 'data'}),
+    }
+    @splice_on(
+        indef_oper, occlusion=('w', 'x'), allow_variadic=True, doc_subs=subs
+    )
     def set_w_and_x(name, val=1, **params):
         w = x = val
         return indef_oper(name=name, w=w, x=x, **params)
@@ -878,6 +883,11 @@ def test_emulation():
         set(p for p in set_w_and_x.__signature__.parameters) ==
         {'name', 'val', 'params'}
     )
+    assert set_w_and_x.__meta__ == {
+        '__doc__': {
+            'subs': subs
+        }
+    }
 
 
 def test_docstring_splice():
@@ -915,4 +925,30 @@ def test_docstring_splice():
         '    <No description>\n'
         'b : float (default: ``1``)\n'
         '    <No description>\n'
+    )
+
+    f.__meta__ = {
+        '__doc__': {
+            'desc': 'Add the two numbers',
+            'subs': {
+                'a': ('x', {'nnum': 'two'}),
+                'b': ('y', {'nnum': 'two'}),
+            },
+        },
+    }
+    f.__signature__ = inspect.signature(f)
+    h = splice_docstring(f, {
+        'x': {'desc': 'one of the {nnum} numbers'},
+        'y': {'desc': 'another of the {nnum} numbers'},
+    })
+    assert f.__meta__ == h.__meta__
+    assert f.__signature__ == h.__signature__
+    assert h.__doc__ == (
+        'Add the two numbers\n\n'
+        'Parameters\n'
+        '----------\n'
+        'a : float \n'
+        '    one of the two numbers\n'
+        'b : float (default: ``1``)\n'
+        '    another of the two numbers\n'
     )

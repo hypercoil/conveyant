@@ -74,6 +74,7 @@ def splice_on(
     allow_variadic: bool = False,
     kwonly_only: bool = False,
     strict_emulation: bool = True,
+    doc_subs: Optional[Mapping[str, Tuple[str, Mapping[str, str]]]] = None,
 ) -> callable:
     """
     Splice the decorated/wrapped function's parameters on another function
@@ -130,6 +131,12 @@ def splice_on(
         h.__signature__ = inspect.signature(h).replace(
             parameters=h_params_unique
         )
+        if doc_subs is not None:
+            metadata = getattr(h, '__meta__', {})
+            doc_metadata = metadata.get('__doc__', {})
+            doc_metadata['subs'] = {**doc_metadata.get('subs', {}), **doc_subs}
+            metadata['__doc__'] = doc_metadata
+            h.__meta__ = metadata
         return emulate_assignment(
             strict=strict_emulation,
             allow_variadic=allow_variadic,
@@ -155,20 +162,27 @@ def splice_docstring(
     parameters = inspect.signature(f).parameters
     if missingdoc is None:
         missingdoc = '<No description>'
-    doc_template = base_str or f.__doc__ or missingdoc
+    doc_template = (
+        getattr(f, '__meta__', {}).get('__doc__', {}).get('desc', None)
+        or base_str
+        or f.__doc__
+        or missingdoc
+    )
     if indentation is None:
         indentation = '    '
     doc_template += '\n\nParameters\n----------\n'
     doc_vars = {}
+    subs = getattr(f, '__meta__', {}).get('__doc__', {}).get('subs', {})
     for k in parameters:
-        v = template.get(k, {})
+        k_query, v_format = subs.get(k, (k, {}))
+        v = template.get(k_query, {})
         doc_vars[f'{k}_type'] = v.get(
             'type', parameters[k].annotation.__name__
         )
         doc_vars[f'{k}_desc'] = indent(
             v.get('desc', missingdoc), # parameters[k].annotation.__doc__),
             indentation,
-        )
+        ).format(**v_format)
         default = v.get('default', parameters[k].default)
         if default is inspect.Parameter.empty:
             doc_vars[f'{k}_default'] = ''
